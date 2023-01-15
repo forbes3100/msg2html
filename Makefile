@@ -6,6 +6,7 @@ coverage:
 clean:
 	rm -f TestAttachments/05/ef/at_0_1234_5678/HEART.jpeg
 	rm -rf TestAttachments/bf
+	rm -f test_msg.db
 	rm -f test_*.html
 	rm -rf test_links
 
