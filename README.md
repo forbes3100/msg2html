@@ -1,19 +1,36 @@
-# msg2html
-Converts a Mac Messages database into HTML
+# macbak
+iCloud backup via a Mac, with optional source control
+
+
+## Introduction
+
+macbak is a collection of tools for providing an independent backup and
+optional source control for Apple iCloud based resources. These work by
+converting each resource to HTML and copying it to your Mac for both
+safekeeping and as a way to allow line-based source control such as git if
+desired. The icdrivebak tool doesn't convert but forces all iCloud Drive files
+to be copied to the Mac. Together these allow normal Mac backup of these files.
+
+Tools:
+
+- msg2html -- Convert Mac Messages database into HTML
+- notes2html -- Back up Apple Notes to HTML or PDF files
+- icdrivebak -- Force all iCloud Drive files to be downloaded, for backup
+
 
 ## Getting Started
 
 To install, first clone the repository:
 
 ```
-git clone https://github.com/forbes3100/msg2html.git
-cd msg2html
+git clone https://github.com/forbes3100/macbak.git
+cd macbak
 ```
 
 Then install dependencies:
 
 ```
-pip3 install coverage pyemoji pillow_heif
+pip3 install coverage pyemoji pillow_heif ui
 ```
 
 ## Running the tests
@@ -26,11 +43,13 @@ The following command should run all tests, ending with "OK".
 
 ## Usage
 
-Copy your chat.db file and Attachments folder from your library into the msg2html working directory:
+# msg2html
 
-In Finder, hold down Option and choose Go > Library. Open the Messages folder there, select both chat.db and the Attachments folder, and type Cmd-C to copy. Then navigate to your msg2html folder and type Cmd-V.
+Copy your chat.db file and Attachments folder from your library into the macbak working directory:
 
-The program requires the file chat_handles.json, a list of phone-numbers/email and corresponding full names in JSON format, in the msg2html folder. e.g.:
+In Finder, hold down Option and choose Go > Library. Open the Messages folder there, select both chat.db and the Attachments folder, and type Cmd-C to copy. Then navigate to your macbak folder and type Cmd-V.
+
+The program requires the file chat_handles.json, a list of phone-numbers/email and corresponding full names in JSON format, in the macbak folder. e.g.:
 
 ```
 {
@@ -75,15 +94,30 @@ For ease in extracting image files, the "-f" switch tells it to generate a "link
 ./msg2html.py 2022 -f
 ```
 
+# notes2html
+
+Double-click notes2html.applescript which should open in the Script Editor. Either run it there by clicking the start button, or save it as a stand-alone application.
+
+When run it will create the folder notes_icloud_bak in Documents if it doesn't exist, and write each note to a .html file there in subfolders matching the folder hierarchy in Notes. The file names have spaces changed to underscores to ease use with Unix.
+
+When run again only updated notes will be written.
+
+To change it to write PDF files, open the file in the Script Editor and change the "set writePdf to" line to "true". Note that PDF exporting from Notes requires adding the Script Editor to the list of applications in System Preferences>Privacy & Security>Accessibility, which can be a security risk.
+
+
+# icdrivebak
+
+
+
 ## Contributing
 
-Please read [CONTRIBUTING.md](https://github.com/forbes3100/msg2html.git/blob/master/CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
+Please read [CONTRIBUTING.md](https://github.com/forbes3100/macbak.git/blob/master/CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
 
 ## Authors
 
 * **Scott Forbes** - *Initial work* - [forbes3100](https://github.com/forbes3100)
 
-See also the list of [contributors](https://github.com/forbes3100/msg2html.git/graphs/contributors) who participated in this project.
+See also the list of [contributors](https://github.com/forbes3100/macbak.git/graphs/contributors) who participated in this project.
 
 ## License
 
