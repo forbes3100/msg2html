@@ -149,7 +149,7 @@ class Message {
     var handleID: Int
     var text: String?
     var svc: String
-    
+
     init(rowid: Int, date: Date, guid: String, isFromMe: Bool, hasAttach: Bool,
          handleID: Int, text: String?, svc: String) {
         self.rowid = rowid
@@ -203,18 +203,17 @@ func getChatDBCopyPath(toDir msgsBakDirPath: String) -> String {
 
 class HTML {
     private var html = ""
-    
+
     func append(tag: String, attributes: [String: String] = [:], content: String? = nil) {
         let a = attributes.map { " \($0.key)=\"\($0.value)\"" }.joined()
         let c = content ?? ""
         html.append("<\(tag)\(a)>\(c)</\(tag)>")
     }
-    
+
     func append(body: String) {
         append(tag: "body", content: body)
     }
-    
-    //func append(msgDB: String, attDir: String, year: Int, extAttDir: String? = nil) {
+
     func appendMessagesFor(year: Int, msgsBakDirPath: String, extAttDir: String? = nil) {
         let fileManager = FileManager.default
         let handlesName = "chat_handles.json"
@@ -229,7 +228,7 @@ class HTML {
                 fatalError("Reading database handles file \(handlesPath)")
             }
         }
-        
+
         if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
             var files = [String]()
             let enumerator = fileManager.enumerator(atPath: extAttDir)
@@ -241,29 +240,28 @@ class HTML {
                 extAttFiles![file] = URL(fileURLWithPath: extAttDir)
             }
         }
-        
+
         let chatDBFilePath = getChatDBCopyPath(toDir: msgsBakDirPath)
         var db: OpaquePointer?
 
-       //guard sqlite3_open_v2(chatDBFilePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-       guard sqlite3_open_v2(chatDBFilePath, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(chatDBFilePath, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
             let errorMessage = String(cString: sqlite3_errmsg(db))
             fatalError("Opening database \(chatDBFilePath): \(errorMessage)")
         }
         defer { sqlite3_close(db) }
-        
+
         var statement: OpaquePointer?
         let query = "SELECT rowid, id FROM handle;"
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
             defer { sqlite3_finalize(statement) }
-            
+
             var handles = [Int: String]()
             while sqlite3_step(statement) == SQLITE_ROW {
                 let rowid = Int(sqlite3_column_int(statement, 0))
                 let id = String(cString: sqlite3_column_text(statement, 1))
                 handles[rowid] = idNamedHandles[id, default: id]
             }
-            
+
             let messageQuery = """
             SELECT rowid, datetime(substr(date, 1, 9) + 978307200, 'unixepoch',
             'localtime') AS f_date, guid, is_from_me, cache_has_attachments,
@@ -274,10 +272,10 @@ class HTML {
             if sqlite3_prepare_v2(db, messageQuery, -1, &statement2,
                                   nil) == SQLITE_OK {
                 defer { sqlite3_finalize(statement2) }
-                
+
                 var prevDay = 0
                 var prevWho: String? = nil
-                
+
                 while sqlite3_step(statement2) == SQLITE_ROW {
                     let rowid = Int(sqlite3_column_int(statement2, 0))
                     let dateString = String(cString: sqlite3_column_text(statement2, 1))
@@ -290,11 +288,11 @@ class HTML {
                         text = String(cString: t)
                     }
                     let svc = String(cString: sqlite3_column_text(statement2, 7))
-                    
+
                     let dateFormatter = DateFormatter()
                     dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
                     let date = dateFormatter.date(from: dateString)!
-                    
+
                     let msg = Message(
                         rowid: rowid,
                         date: date,
@@ -305,21 +303,21 @@ class HTML {
                         text: text,
                         svc: svc
                     )
-                    
+
                     let calendar = Calendar.current
                     if calendar.component(.year, from: date) != year {
                         continue
                     }
-                    
+
                     if msg.handleID == 0 {
                         msg.isFromMe = true
                     }
-                    
+
                     let day = calendar.ordinality(of: .day, in: .year, for: date) ?? -1
                     if day != prevDay {
                         append(tag: "hr")
                     }
-                    
+
                     let who = handles[msg.handleID]
                     css = CSS(isFromMe: msg.isFromMe, svc: msg.svc)
                     if msg.isFromMe {
@@ -343,31 +341,19 @@ class HTML {
         }
     }
 
-    /*
-    func write(file: String) {
-        guard let out = FileHandle(forWritingAtPath: "\(file).html") else {
-            fatalError("Could not open \(file) for writing")
-        }
-        out.write(htmlHead.data(using: .utf8)!)
-        out.write(html.data(using: .utf8)!)
-        out.write(htmlTail.data(using: .utf8)!)
-        out.closeFile()
-    }
-     */
-
     func write(file: String) {
         let fileURL = URL(fileURLWithPath: file)
-        
+
         do {
             // Create the file if it doesn't exist
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
             }
-            
+
             // Write the content to the file
             let out = try FileHandle(forWritingTo: fileURL)
             defer { out.closeFile() }
-            
+
             out.write(htmlHead.data(using: .utf8)!)
             out.write(html.data(using: .utf8)!)
             out.write(htmlTail.data(using: .utf8)!)
@@ -409,68 +395,68 @@ func msg2html() {
 }
 
 /*
- 
- // Create a (unique) symlink to imageFileH in the links dir.
- func addLinkTo(imageFileHtml: String, mime_t: String) {
- if mime_t.prefix(5) == "image" {
- let imageFile = imageFileHtml.replacingOccurrences(of: "%23", with: "#")
- let imagePath = URL(fileURLWithPath: imageFile).standardizedFileURL.path
- 
- if !FileManager.default.fileExists(atPath: imagePath) {
- return
- }
- 
- let imageName = URL(fileURLWithPath: imageFile).lastPathComponent
- var link = URL(fileURLWithPath: links).appendingPathComponent(imageName)
- var seq = 0
- let linkName = link.deletingPathExtension().lastPathComponent
- let linkExt = link.pathExtension
- 
- while FileManager.default.fileExists(atPath: link.path) {
- seq += 1
- link = URL(fileURLWithPath: links).appendingPathComponent("\(linkName)_\(seq).\(linkExt)")
- }
- 
- try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: imagePath))
- }
- }
- 
- func output(text: String) {
- if let out = outFileHandle {
- if debug > 0 {
- let utext = text.unicodeScalars.map { String(format: "\\u{%X}", $0.value) }.joined()
- out.write("<p\(css.info_class)>text(\(text.count)) = \(utext)</p>\n")
- }
- 
- if !text.isEmpty {
- let text = text.htmlEscaped().replacingOccurrences(of: "\n", with: "<br>")
- 
- out.write(
- "<div\(css.con_class)><div\(css.flex_class)>\n"
- + "<p\(css.text_class)>\(text)</p>\n"
- + "</div></div>\n"
- )
- }
- }
- }
- 
- extension String {
- func htmlEscaped() -> String {
- var result = self
- let escapeMapping: [Character: String] = [
- "<": "&lt;",
- ">": "&gt;",
- "&": "&amp;",
- "\"": "&quot;",
- "'": "&#x27;",
- ]
- 
- for (key, value) in escapeMapping {
- result = result.replacingOccurrences(of: String(key), with: value)
- }
- 
- return result
- }
- }
- 
- */
+
+// Create a (unique) symlink to imageFileH in the links dir.
+func addLinkTo(imageFileHtml: String, mime_t: String) {
+    if mime_t.prefix(5) == "image" {
+        let imageFile = imageFileHtml.replacingOccurrences(of: "%23", with: "#")
+        let imagePath = URL(fileURLWithPath: imageFile).standardizedFileURL.path
+
+        if !FileManager.default.fileExists(atPath: imagePath) {
+            return
+        }
+
+        let imageName = URL(fileURLWithPath: imageFile).lastPathComponent
+        var link = URL(fileURLWithPath: links).appendingPathComponent(imageName)
+        var seq = 0
+        let linkName = link.deletingPathExtension().lastPathComponent
+        let linkExt = link.pathExtension
+
+        while FileManager.default.fileExists(atPath: link.path) {
+            seq += 1
+            link = URL(fileURLWithPath: links).appendingPathComponent("\(linkName)_\(seq).\(linkExt)")
+        }
+
+        try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: imagePath))
+    }
+}
+
+func output(text: String) {
+    if let out = outFileHandle {
+        if debug > 0 {
+            let utext = text.unicodeScalars.map { String(format: "\\u{%X}", $0.value) }.joined()
+            out.write("<p\(css.info_class)>text(\(text.count)) = \(utext)</p>\n")
+        }
+
+        if !text.isEmpty {
+            let text = text.htmlEscaped().replacingOccurrences(of: "\n", with: "<br>")
+
+            out.write(
+                "<div\(css.con_class)><div\(css.flex_class)>\n"
+                + "<p\(css.text_class)>\(text)</p>\n"
+                + "</div></div>\n"
+            )
+        }
+    }
+}
+
+extension String {
+    func htmlEscaped() -> String {
+        var result = self
+        let escapeMapping: [Character: String] = [
+            "<": "&lt;",
+            ">": "&gt;",
+            "&": "&amp;",
+            "\"": "&quot;",
+            "'": "&#x27;",
+        ]
+
+        for (key, value) in escapeMapping {
+            result = result.replacingOccurrences(of: String(key), with: value)
+        }
+
+        return result
+    }
+}
+
+*/
