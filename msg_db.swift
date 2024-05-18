@@ -53,15 +53,17 @@ func getChatDBCopyPath(toDir msgsBakDirPath: String) -> String {
     }
 }
 
-class MessageSource {
+class MessageSource_ChatDB {
     private var msgsBakDirPath: String = ""
     private var chatDBFilePath: String = ""
     private var db: OpaquePointer?
+    private var idNamedHandles: [String:String] = [:]
     
-    func open(msgsBakDirPath: String) {
+    init(msgsBakDirPath: String, idNamedHandles: [String:String]) {
         self.msgsBakDirPath = msgsBakDirPath
+        self.idNamedHandles = idNamedHandles
         self.chatDBFilePath = getChatDBCopyPath(toDir: msgsBakDirPath)
-        
+
         guard sqlite3_open_v2(chatDBFilePath, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
             let errorMessage = String(cString: sqlite3_errmsg(db))
             fatalError("Opening database \(chatDBFilePath): \(errorMessage)")
@@ -71,20 +73,6 @@ class MessageSource {
     
     func getMessagesFor(year: Int) -> [Message] {
         var messages: [Message] = []
-        
-        let fileManager = FileManager.default
-        let handlesName = "chat_handles.json"
-        let handlesPath = msgsBakDirPath + handlesName
-        var idNamedHandles: [String:String] = [:]
-        if fileManager.fileExists(atPath: handlesPath) {
-            do {
-                let url = URL(fileURLWithPath: handlesPath)
-                let data = try Data(contentsOf: url)
-                idNamedHandles = try JSONSerialization.jsonObject(with: data, options: []) as! [String: String]
-            } catch {
-                fatalError("Reading database handles file \(handlesPath)")
-            }
-        }
         
         let chatDBFilePath = getChatDBCopyPath(toDir: msgsBakDirPath)
         var db: OpaquePointer?

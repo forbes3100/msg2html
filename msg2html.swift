@@ -150,6 +150,18 @@ class Message {
     var text: String?
     var svc: String
 
+    init() {
+        self.who = ""
+        self.rowid = -1
+        self.date = Date()
+        self.guid = ""
+        self.isFromMe = false
+        self.hasAttach = false
+        self.handleID = -1
+        self.text = nil
+        self.svc = ""
+    }
+
     init(who: String?, rowid: Int, date: Date, guid: String, isFromMe: Bool, hasAttach: Bool,
          handleID: Int, text: String?, svc: String) {
         self.who = who
@@ -177,7 +189,7 @@ class HTML {
         append(tag: "body", content: body)
     }
 
-    func appendMessagesFor(year: Int, msgsBakDirPath: String, extAttDir: String? = nil) {
+    func appendMessages(archivePath: String? = nil, year: Int, msgsBakDirPath: String, extAttDir: String? = nil) {
         let fileManager = FileManager.default
 
         if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
@@ -192,9 +204,28 @@ class HTML {
             }
         }
 
-        let msgSrc = MessageSource()
-        msgSrc.open(msgsBakDirPath: msgsBakDirPath)
-        let messages = msgSrc.getMessagesFor(year: year)
+        let handlesName = "chat_handles.json"
+        let handlesPath = msgsBakDirPath + handlesName
+        var idNamedHandles: [String:String] = [:]
+        if fileManager.fileExists(atPath: handlesPath) {
+            do {
+                let url = URL(fileURLWithPath: handlesPath)
+                let data = try Data(contentsOf: url)
+                idNamedHandles = try JSONSerialization.jsonObject(with: data, options: []) as! [String: String]
+            } catch {
+                fatalError("Reading database handles file \(handlesPath)")
+            }
+        }
+
+        var messages: [Message] = []
+        if let archivePath = archivePath {
+            let msgSrc = MessageSource_Archive(msgsBakDirPath: msgsBakDirPath,
+                                               idNamedHandles: idNamedHandles)
+            messages = msgSrc.getMessages(inArchive: archivePath, forYear: year)
+        } else {
+            let msgSrc = MessageSource_ChatDB(msgsBakDirPath: msgsBakDirPath, idNamedHandles: idNamedHandles)
+            messages = msgSrc.getMessagesFor(year: year)
+        }
 
         var prevDay = 0
         var prevWho: String? = nil
@@ -279,10 +310,14 @@ func msg2html() {
         }
     }
 
-    let h = HTML()
-    let year = Calendar.current.component(.year, from: Date())
-    h.appendMessagesFor(year: year, msgsBakDirPath: msgsBakDirPath)
-    h.write(file: msgsBakDirPath + "\(year).html")
+    let archivePath = "/Users/scott/Documents/messages_archive"
+    let archiveYear = 2019
+
+    let html = HTML()
+    //let year = Calendar.current.component(.year, from: Date())
+    let year = archiveYear
+    html.appendMessages(archivePath: archivePath, year: year, msgsBakDirPath: msgsBakDirPath)
+    html.write(file: msgsBakDirPath + "\(year).html")
 }
 
 /*
