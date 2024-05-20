@@ -76,7 +76,7 @@ class InstantMessage: NSObject, NSSecureCoding {
     var Flags: Int
     var GUID: String
     var IsInvitation: Bool
-    var IsRead: Bool
+    //var IsRead: Bool
     var MessageText: NSMutableAttributedString
     var OriginalMessage: String
     var Sender: Presentity
@@ -93,7 +93,7 @@ class InstantMessage: NSObject, NSSecureCoding {
         self.Flags = coder.decodeInteger(forKey: "Flags")
         self.GUID = coder.decodeObject(forKey: "GUID") as? String ?? ""
         self.IsInvitation = coder.decodeBool(forKey: "IsInvitation")
-        self.IsRead = coder.decodeBool(forKey: "IsRead")
+        //self.IsRead = coder.decodeBool(forKey: "IsRead")
         self.MessageText = coder.decodeObject(forKey: "MessageText") as? NSMutableAttributedString ?? NSMutableAttributedString()
         self.OriginalMessage = coder.decodeObject(forKey: "OriginalMessage") as? String ?? ""
         self.Sender = coder.decodeObject(forKey: "Sender") as? Presentity ?? Presentity()
@@ -108,12 +108,80 @@ class InstantMessage: NSObject, NSSecureCoding {
         coder.encode(Flags, forKey: "Flags")
         coder.encode(GUID, forKey: "GUID")
         coder.encode(IsInvitation, forKey: "IsInvitation")
-        coder.encode(IsRead, forKey: "IsRead")
+        //coder.encode(IsRead, forKey: "IsRead")
         coder.encode(MessageText, forKey: "MessageText")
         coder.encode(OriginalMessage, forKey: "OriginalMessage")
         coder.encode(Sender, forKey: "Sender")
         coder.encode(Subject, forKey: "Subject")
         coder.encode(Time, forKey: "Time")
+    }
+}
+
+class NSParagraphStyle: NSObject, NSSecureCoding {
+    var NSName: String
+    var NSSize: Int
+    var NSfFlags: Int
+
+    static var supportsSecureCoding: Bool {
+        return true
+    }
+
+    required init?(coder: NSCoder) {
+        // Initialize all properties with default values before calling super.init()
+        self.NSName = coder.decodeObject(forKey: "NSName") as? String ?? ""
+        self.NSSize = coder.decodeInteger(forKey: "NSSize")
+        self.NSfFlags = coder.decodeInteger(forKey: "NSfFlags")
+        
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(NSName, forKey: "NSName")
+        coder.encode(NSSize, forKey: "NSSize")
+        coder.encode(NSfFlags, forKey: "NSfFlags")
+    }
+
+    override init() {
+        // Initialize properties with default values
+        self.NSName = ""
+        self.NSSize = 0
+        self.NSfFlags = 0
+        
+        super.init()
+    }
+}
+
+class NSMutableParagraphStyle: NSObject, NSSecureCoding {
+    var NSAlignment: Int
+    var NSAllowsTighteningForTruncation: Int
+    var NSTabStops: String
+
+    static var supportsSecureCoding: Bool {
+        return true
+    }
+
+    required init?(coder: NSCoder) {
+        // Initialize all properties with default values before calling super.init()
+        self.NSAlignment = coder.decodeInteger(forKey: "NSAlignment")
+        self.NSAllowsTighteningForTruncation = coder.decodeInteger(forKey: "NSAllowsTighteningForTruncation")
+        self.NSTabStops = coder.decodeObject(forKey: "NSTabStops") as? String ?? ""
+        
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(NSAlignment, forKey: "NSAlignment")
+        coder.encode(NSAllowsTighteningForTruncation, forKey: "NSAllowsTighteningForTruncation")
+        coder.encode(NSTabStops, forKey: "NSTabStops")
+    }
+
+    override init() {
+        // Initialize properties with default values
+        self.NSAlignment = 0
+        self.NSAllowsTighteningForTruncation = 0
+        self.NSTabStops = ""
+        
+        super.init()
     }
 }
 
@@ -278,40 +346,58 @@ class MessageSource_Archive {
         do {
             // Read the file data
             let fileData = try Data(contentsOf: fileURL)
-
-            // Register necessary classes
-            NSKeyedUnarchiver.setClass(Presentity.self, forClassName: "Presentity")
+        
+            // Register custom classes
             NSKeyedUnarchiver.setClass(InstantMessage.self, forClassName: "InstantMessage")
-
+            NSKeyedUnarchiver.setClass(Presentity.self, forClassName: "Presentity")
+            NSKeyedUnarchiver.setClass(NSParagraphStyle.self, forClassName: "NSParagraphStyle")
+            NSKeyedUnarchiver.setClass(NSMutableParagraphStyle.self, forClassName:
+                                        "NSMutableParagraphStyle")
+        
+            // Attempt to unarchive the data
             if let unarchivedObject = try NSKeyedUnarchiver.unarchivedObject(ofClasses:
-                    [NSDictionary.self, NSArray.self, NSString.self, Presentity.self,
-                     InstantMessage.self, NSMutableString.self],
-                    from: fileData) as? NSDictionary {
-                print("Unarchived Dictionary: \(unarchivedObject)")
-
-                if let topDict = unarchivedObject["$top"] as? NSDictionary {
-                    if let metadataRef = topDict["metadata"] as? NSDictionary,
-                       let rootRef = topDict["root"] as? NSDictionary,
-                       let metadataUID = metadataRef["CF$UID"] as? Int,
-                       let rootUID = rootRef["CF$UID"] as? Int {
-
-                        if let objects = unarchivedObject["$objects"] as? NSArray {
-                            let metadataObject = objects[metadataUID]
-                            let rootObject = objects[rootUID]
-
-                            print("Metadata Object: \(metadataObject)")
-                            print("Root Object: \(rootObject)")
-
-                            // Example of resolving a string object
-                            if let messageDict = objects[17] as? NSDictionary,
-                               let messageString = messageDict["NS.string"] as? String {
-                                print("Message: \(messageString)")
+                    [NSDictionary.self, NSArray.self, NSMutableArray.self, NSString.self,
+                     NSMutableString.self, NSMutableAttributedString.self, NSDate.self,
+                     NSParagraphStyle.self, NSMutableParagraphStyle.self, NSNumber.self,
+                     Presentity.self, InstantMessage.self],
+                    from: fileData) {
+            
+                if let unarchivedDict = unarchivedObject as? NSDictionary {
+                    print("Unarchived Dictionary: \(unarchivedDict)")
+                
+                    if let topDict = unarchivedDict["$top"] as? NSDictionary {
+                        if let metadataRef = topDict["metadata"] as? NSDictionary,
+                           let rootRef = topDict["root"] as? NSDictionary,
+                           let metadataUID = metadataRef["CF$UID"] as? Int,
+                           let rootUID = rootRef["CF$UID"] as? Int {
+                        
+                            if let objects = unarchivedDict["$objects"] as? NSArray {
+                                let metadataObject = objects[metadataUID]
+                                let rootObject = objects[rootUID]
+                            
+                                print("Metadata Object: \(metadataObject)")
+                                print("Root Object: \(rootObject)")
+                            
+                                // Example of resolving a string object
+                                if let messageDict = objects[17] as? NSDictionary,
+                                   let messageString = messageDict["NS.string"] as? String {
+                                    print("Message: \(messageString)")
+                                }
+                            } else {
+                                print("Failed to cast '$objects' to NSArray.")
                             }
+                        } else {
+                            print("Failed to extract 'metadata' or 'root' references.")
                         }
+                    } else {
+                        print("Failed to cast '$top' to NSDictionary.")
                     }
+                } else {
+                    print("Failed to cast unarchived object to NSDictionary.")
+                    print(" Unarchived object: \(unarchivedObject)")
                 }
             } else {
-                print("Failed to cast unarchived object to NSDictionary.")
+                print("Unarchived object is nil.")
             }
         } catch {
             print("Error unarchiving file: \(error)")
