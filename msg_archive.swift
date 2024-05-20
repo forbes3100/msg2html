@@ -45,7 +45,7 @@ class Presentity: NSObject, NSSecureCoding {
         self.ID = coder.decodeObject(forKey: "ID") as? String ?? ""
         self.ServiceLoginID = coder.decodeObject(forKey: "ServiceLoginID") as? String ?? ""
         self.ServiceName = coder.decodeObject(forKey: "ServiceName") as? String ?? ""
-        
+
         super.init()
     }
 
@@ -64,7 +64,7 @@ class Presentity: NSObject, NSSecureCoding {
         self.ID = ""
         self.ServiceLoginID = ""
         self.ServiceName = ""
-        
+
         super.init()
     }
 }
@@ -99,7 +99,7 @@ class InstantMessage: NSObject, NSSecureCoding {
         self.Sender = coder.decodeObject(forKey: "Sender") as? Presentity ?? Presentity()
         self.Subject = coder.decodeObject(forKey: "Subject") as? Presentity ?? Presentity()
         self.Time = coder.decodeObject(forKey: "Time") as? NSDate ?? NSDate()
-        
+
         super.init()
     }
 
@@ -128,14 +128,14 @@ class MessageSource_Archive {
         let process = Process()
         process.launchPath = "/usr/bin/plutil"
         process.arguments = ["-convert", "xml1", "-o", outputPath, inputPath]
-        
+
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
-        
+
         process.launch()
         process.waitUntilExit()
-        
+
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         if process.terminationStatus != 0 {
             let errorOutput = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -143,25 +143,25 @@ class MessageSource_Archive {
                           userInfo: [NSLocalizedDescriptionKey: errorOutput])
         }
     }
-    
+
     init(msgsBakDirPath: String, idNamedHandles: [String:String]) {
         self.msgsBakDirPath = msgsBakDirPath
         self.idNamedHandles = idNamedHandles
         self.fileManager = FileManager.default
         self.tempDirectoryURL = self.fileManager.temporaryDirectory
     }
-    
+
     func readXMLFile(at url: URL) throws {
         let data = try Data(contentsOf: url)
         let parser = XMLParser(data: data)
         let delegate = XMLParserDelegateImpl(messageSource: self)
         parser.delegate = delegate
-        
+
         if !parser.parse() {
             throw FileError.xmlParsingError
         }
     }
-    
+
     class XMLParserDelegateImpl: NSObject, XMLParserDelegate {
         var depth = 0
         var elementStack: [String] = []
@@ -185,11 +185,11 @@ class MessageSource_Archive {
                 print("\(indent(depth))\(depth) <\(elementName)>")
             }
         }
-        
+
         func parser(_ parser: XMLParser, foundCharacters string: String) {
             let trimmedString = string.trimmingCharacters(in: .whitespacesAndNewlines)
             let currentElement = elementStack.last
-            
+
             switch depth {
             case 3:
                 if currentElement == "key" {
@@ -242,7 +242,7 @@ class MessageSource_Archive {
                 break
             }
         }
-        
+
         func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?,
                     qualifiedName qName: String?) {
             if debug > 1 {
@@ -255,7 +255,7 @@ class MessageSource_Archive {
 
     func gatherMessagesFrom(ichatFile fileURL: URL) {
         print("Processing .ichat file: \(fileURL.path)")
-        
+
         let uniqueFilename = UUID().uuidString
         let tempFileURL = tempDirectoryURL.appendingPathComponent(uniqueFilename
             ).appendingPathExtension("xml")
@@ -321,27 +321,27 @@ class MessageSource_Archive {
     func getMessages(inArchive directoryPath: String, forYear year: Int) -> [Message] {
         messages = []
         let directoryURL = URL(fileURLWithPath: directoryPath)
-        
+
         do {
             // Get the contents of the directory
             let subdirectories = try fileManager.contentsOfDirectory(
                 at: directoryURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles,
                 .skipsSubdirectoryDescendants])
-            
+
             // Filter for subdirectories that start with the specified year
             let yr = "\(year)"
             let yearSubdirectories = subdirectories.filter { $0.hasDirectoryPath &&
                 $0.lastPathComponent.hasPrefix(yr) }
-            
+
             for subdirectory in yearSubdirectories {
                 // Get the contents of the subdirectory
                 let ichatFiles = try fileManager.contentsOfDirectory(
                     at: subdirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles,
                     .skipsSubdirectoryDescendants])
-                
+
                 // Filter for .ichat files
                 let ichatFilesToProcess = ichatFiles.filter { $0.pathExtension == "ichat" }
-                
+
                 for ichatFile in ichatFilesToProcess {
                     // Process the .ichat file
                     //gatherMessagesFrom(ichatFile: ichatFile)

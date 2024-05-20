@@ -58,7 +58,7 @@ class MessageSource_ChatDB {
     private var chatDBFilePath: String = ""
     private var db: OpaquePointer?
     private var idNamedHandles: [String:String] = [:]
-    
+
     init(msgsBakDirPath: String, idNamedHandles: [String:String]) {
         self.msgsBakDirPath = msgsBakDirPath
         self.idNamedHandles = idNamedHandles
@@ -70,31 +70,31 @@ class MessageSource_ChatDB {
         }
         //defer { sqlite3_close(db) }
     }
-    
+
     func getMessagesFor(year: Int) -> [Message] {
         var messages: [Message] = []
-        
+
         let chatDBFilePath = getChatDBCopyPath(toDir: msgsBakDirPath)
         var db: OpaquePointer?
-        
+
         guard sqlite3_open_v2(chatDBFilePath, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
             let errorMessage = String(cString: sqlite3_errmsg(db))
             fatalError("Opening database \(chatDBFilePath): \(errorMessage)")
         }
         defer { sqlite3_close(db) }
-        
+
         var statement: OpaquePointer?
         let query = "SELECT rowid, id FROM handle;"
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
             defer { sqlite3_finalize(statement) }
-            
+
             var handles = [Int: String]()
             while sqlite3_step(statement) == SQLITE_ROW {
                 let rowid = Int(sqlite3_column_int(statement, 0))
                 let id = String(cString: sqlite3_column_text(statement, 1))
                 handles[rowid] = idNamedHandles[id, default: id]
             }
-            
+
             let messageQuery = """
             SELECT rowid, datetime(substr(date, 1, 9) + 978307200, 'unixepoch',
             'localtime') AS f_date, guid, is_from_me, cache_has_attachments,
@@ -105,7 +105,7 @@ class MessageSource_ChatDB {
             if sqlite3_prepare_v2(db, messageQuery, -1, &statement2,
                                   nil) == SQLITE_OK {
                 defer { sqlite3_finalize(statement2) }
-                
+
                 while sqlite3_step(statement2) == SQLITE_ROW {
                     let rowid = Int(sqlite3_column_int(statement2, 0))
                     let dateString = String(cString: sqlite3_column_text(statement2, 1))
@@ -118,7 +118,7 @@ class MessageSource_ChatDB {
                         text = String(cString: t)
                     }
                     let svc = String(cString: sqlite3_column_text(statement2, 7))
-                    
+
                     let dateFormatter = DateFormatter()
                     dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
                     let date = dateFormatter.date(from: dateString)!
@@ -135,12 +135,12 @@ class MessageSource_ChatDB {
                         text: text,
                         svc: svc
                     )
-                    
+
                     let calendar = Calendar.current
                     if calendar.component(.year, from: date) != year {
                         continue
                     }
-                    
+
                     if msg.handleID == 0 {
                         msg.isFromMe = true
                     }
