@@ -25,6 +25,98 @@ enum FileError: Error {
     case xmlParsingError
 }
 
+import Foundation
+
+class Presentity: NSObject, NSSecureCoding {
+    var AccountID: String
+    var AnonymousKey: Bool
+    var ID: String
+    var ServiceLoginID: String
+    var ServiceName: String
+
+    static var supportsSecureCoding: Bool {
+        return true
+    }
+
+    required init?(coder: NSCoder) {
+        // Initialize all properties with default values before calling super.init()
+        self.AccountID = coder.decodeObject(forKey: "AccountID") as? String ?? ""
+        self.AnonymousKey = coder.decodeBool(forKey: "AnonymousKey")
+        self.ID = coder.decodeObject(forKey: "ID") as? String ?? ""
+        self.ServiceLoginID = coder.decodeObject(forKey: "ServiceLoginID") as? String ?? ""
+        self.ServiceName = coder.decodeObject(forKey: "ServiceName") as? String ?? ""
+        
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(AccountID, forKey: "AccountID")
+        coder.encode(AnonymousKey, forKey: "AnonymousKey")
+        coder.encode(ID, forKey: "ID")
+        coder.encode(ServiceLoginID, forKey: "ServiceLoginID")
+        coder.encode(ServiceName, forKey: "ServiceName")
+    }
+
+    override init() {
+        // Initialize properties with default values
+        self.AccountID = ""
+        self.AnonymousKey = false
+        self.ID = ""
+        self.ServiceLoginID = ""
+        self.ServiceName = ""
+        
+        super.init()
+    }
+}
+
+import Foundation
+
+class InstantMessage: NSObject, NSSecureCoding {
+    var BaseWritingDirection: Int
+    var Flags: Int
+    var GUID: String
+    var IsInvitation: Bool
+    var IsRead: Bool
+    var MessageText: NSMutableAttributedString
+    var OriginalMessage: String
+    var Sender: Presentity
+    var Subject: Presentity
+    var Time: NSDate
+
+    static var supportsSecureCoding: Bool {
+        return true
+    }
+
+    required init?(coder: NSCoder) {
+        // Initialize all properties with default values before calling super.init()
+        self.BaseWritingDirection = coder.decodeInteger(forKey: "BaseWritingDirection")
+        self.Flags = coder.decodeInteger(forKey: "Flags")
+        self.GUID = coder.decodeObject(forKey: "GUID") as? String ?? ""
+        self.IsInvitation = coder.decodeBool(forKey: "IsInvitation")
+        self.IsRead = coder.decodeBool(forKey: "IsRead")
+        self.MessageText = coder.decodeObject(forKey: "MessageText") as? NSMutableAttributedString ?? NSMutableAttributedString()
+        self.OriginalMessage = coder.decodeObject(forKey: "OriginalMessage") as? String ?? ""
+        self.Sender = coder.decodeObject(forKey: "Sender") as? Presentity ?? Presentity()
+        self.Subject = coder.decodeObject(forKey: "Subject") as? Presentity ?? Presentity()
+        self.Time = coder.decodeObject(forKey: "Time") as? NSDate ?? NSDate()
+        
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(BaseWritingDirection, forKey: "BaseWritingDirection")
+        coder.encode(Flags, forKey: "Flags")
+        coder.encode(GUID, forKey: "GUID")
+        coder.encode(IsInvitation, forKey: "IsInvitation")
+        coder.encode(IsRead, forKey: "IsRead")
+        coder.encode(MessageText, forKey: "MessageText")
+        coder.encode(OriginalMessage, forKey: "OriginalMessage")
+        coder.encode(Sender, forKey: "Sender")
+        coder.encode(Subject, forKey: "Subject")
+        coder.encode(Time, forKey: "Time")
+    }
+}
+
 class MessageSource_Archive {
     private var msgsBakDirPath: String = ""
     private var idNamedHandles: [String:String] = [:]
@@ -180,7 +272,52 @@ class MessageSource_Archive {
             print("Error during XML processing: \(error)")
         }
     }
-    
+
+    // Function to unarchive a .ichat file and print the contents
+    func unarchiveIChatFile(fileURL: URL) {
+        do {
+            // Read the file data
+            let fileData = try Data(contentsOf: fileURL)
+
+            // Register necessary classes
+            NSKeyedUnarchiver.setClass(Presentity.self, forClassName: "Presentity")
+            NSKeyedUnarchiver.setClass(InstantMessage.self, forClassName: "InstantMessage")
+
+            if let unarchivedObject = try NSKeyedUnarchiver.unarchivedObject(ofClasses:
+                    [NSDictionary.self, NSArray.self, NSString.self, Presentity.self,
+                     InstantMessage.self, NSMutableString.self],
+                    from: fileData) as? NSDictionary {
+                print("Unarchived Dictionary: \(unarchivedObject)")
+
+                if let topDict = unarchivedObject["$top"] as? NSDictionary {
+                    if let metadataRef = topDict["metadata"] as? NSDictionary,
+                       let rootRef = topDict["root"] as? NSDictionary,
+                       let metadataUID = metadataRef["CF$UID"] as? Int,
+                       let rootUID = rootRef["CF$UID"] as? Int {
+
+                        if let objects = unarchivedObject["$objects"] as? NSArray {
+                            let metadataObject = objects[metadataUID]
+                            let rootObject = objects[rootUID]
+
+                            print("Metadata Object: \(metadataObject)")
+                            print("Root Object: \(rootObject)")
+
+                            // Example of resolving a string object
+                            if let messageDict = objects[17] as? NSDictionary,
+                               let messageString = messageDict["NS.string"] as? String {
+                                print("Message: \(messageString)")
+                            }
+                        }
+                    }
+                }
+            } else {
+                print("Failed to cast unarchived object to NSDictionary.")
+            }
+        } catch {
+            print("Error unarchiving file: \(error)")
+        }
+    }
+
     func getMessages(inArchive directoryPath: String, forYear year: Int) -> [Message] {
         messages = []
         let directoryURL = URL(fileURLWithPath: directoryPath)
@@ -207,7 +344,8 @@ class MessageSource_Archive {
                 
                 for ichatFile in ichatFilesToProcess {
                     // Process the .ichat file
-                    gatherMessagesFrom(ichatFile: ichatFile)
+                    //gatherMessagesFrom(ichatFile: ichatFile)
+                    unarchiveIChatFile(fileURL: ichatFile)
                 }
             }
         } catch {
