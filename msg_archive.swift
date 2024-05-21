@@ -27,6 +27,7 @@ enum FileError: Error {
 
 import Foundation
 
+/*
 class Presentity: NSObject, NSSecureCoding {
     var AccountID: String
     var AnonymousKey: Bool
@@ -207,6 +208,7 @@ class CFKeyedArchiverUID: NSObject, NSSecureCoding {
         coder.encode(value, forKey: "value")
     }
 }
+*/
 
 class MessageSource_Archive {
     private var fileManager: FileManager
@@ -249,14 +251,14 @@ class MessageSource_Archive {
                 print("Failed to parse plist.")
                 return
             }
-            print("Parsed Plist: \(plist)")
+            //print("Parsed Plist: \(plist)")
 
             // Access the $top dictionary
             guard let topDict = plist["$top"] as? [String: Any] else {
                 print("Failed to cast '$top' to dictionary.")
                 return
             }
-            print("Top Dictionary: \(topDict)")
+            //print("Top Dictionary: \(topDict)")
 
             // Extract the CF$UID references for metadata and root
             guard let metadataRef = topDict["metadata"], let rootRef = topDict["root"],
@@ -270,14 +272,14 @@ class MessageSource_Archive {
                 print("Failed to retrieve metadata object.")
                 return
             }
-            print("Metadata Object: \(metadataObject)")
+            //print("Metadata Object: \(metadataObject)")
 
             // Resolve the root object using its UID reference
             guard let rootRaw = resolveUID(rootRef, from: objects) else {
                 print("Failed to retrieve root object.")
                 return
             }
-            print("Root Raw Object: \(rootRaw)")
+            //print("Root Raw Object: \(rootRaw)")
 
             // Check if the rootRaw object is a dictionary and extract the array from NS.objects
             guard let rootDict = rootRaw as? [String: Any],
@@ -285,7 +287,7 @@ class MessageSource_Archive {
                 print("Failed to cast root object to dictionary or extract NS.objects.")
                 return
             }
-            print("Root Array: \(rootArray)")
+            //print("Root Array: \(rootArray)")
 
             // Extract the InstantMessage references array
             guard let imsArrayDict = resolveUID(rootArray[2], from: objects) as? [String: Any],
@@ -296,14 +298,13 @@ class MessageSource_Archive {
 
             // Iterate over InstantMessages
             for (index, imRef) in imsArray.enumerated() {
-                let imRef2 = imsArray[index]
-                guard let im = resolveUID(imRef2, from: objects) as? [String:Any] else {
+                guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
                     print("Failed to cast InstantMessage \(index).")
                     return
                 }
                 // Handle InstantMessage elements
-                print("InstantMessage[\(index)] = \(im)")
-                print("InstantMessage[\(index)][\"Subject\"] = \(String(describing: im["Subject"]))")
+                //print("InstantMessage[\(index)] = \(im)")
+                //print("InstantMessage[\(index)][\"Subject\"] = \(String(describing: im["Subject"]))")
                 //let sender = im["Sender"]
                 let message = Message()
                 guard let textRef = im["OriginalMessage"],
@@ -311,7 +312,7 @@ class MessageSource_Archive {
                     print("Failed to cast InstantMessage.OriginalMessage.")
                     return
                 }
-                print("OriginalMessage = \(String(describing: text))")
+                print("Message[\(index)] = '\(String(describing: text))'")
                 //message.text = im["OriginalMessage"]
                 //messages.append(message)
             }
