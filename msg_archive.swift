@@ -131,7 +131,7 @@ class NSParagraphStyle: NSObject, NSSecureCoding {
         self.NSName = coder.decodeObject(forKey: "NSName") as? String ?? ""
         self.NSSize = coder.decodeInteger(forKey: "NSSize")
         self.NSfFlags = coder.decodeInteger(forKey: "NSfFlags")
-        
+
         super.init()
     }
 
@@ -146,7 +146,7 @@ class NSParagraphStyle: NSObject, NSSecureCoding {
         self.NSName = ""
         self.NSSize = 0
         self.NSfFlags = 0
-        
+
         super.init()
     }
 }
@@ -163,9 +163,10 @@ class NSMutableParagraphStyle: NSObject, NSSecureCoding {
     required init?(coder: NSCoder) {
         // Initialize all properties with default values before calling super.init()
         self.NSAlignment = coder.decodeInteger(forKey: "NSAlignment")
-        self.NSAllowsTighteningForTruncation = coder.decodeInteger(forKey: "NSAllowsTighteningForTruncation")
+        self.NSAllowsTighteningForTruncation = coder.decodeInteger(forKey:
+                                    "NSAllowsTighteningForTruncation")
         self.NSTabStops = coder.decodeObject(forKey: "NSTabStops") as? String ?? ""
-        
+
         super.init()
     }
 
@@ -180,225 +181,141 @@ class NSMutableParagraphStyle: NSObject, NSSecureCoding {
         self.NSAlignment = 0
         self.NSAllowsTighteningForTruncation = 0
         self.NSTabStops = ""
-        
+
         super.init()
     }
 }
 
+// Define a custom class to represent CFKeyedArchiverUID objects
+class CFKeyedArchiverUID: NSObject, NSSecureCoding {
+    static var supportsSecureCoding: Bool {
+        return true
+    }
+
+    var value: Int
+
+    init(value: Int) {
+        self.value = value
+    }
+
+    required init?(coder: NSCoder) {
+        self.value = coder.decodeInteger(forKey: "value")
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(value, forKey: "value")
+    }
+}
+
 class MessageSource_Archive {
-    private var msgsBakDirPath: String = ""
-    private var idNamedHandles: [String:String] = [:]
     private var fileManager: FileManager
-    private var tempDirectoryURL: URL
     var messages: [Message] = []
 
-    func convertBinaryPlistToXML(atPath inputPath: String, outputPath: String) throws {
-        let process = Process()
-        process.launchPath = "/usr/bin/plutil"
-        process.arguments = ["-convert", "xml1", "-o", outputPath, inputPath]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        process.launch()
-        process.waitUntilExit()
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if process.terminationStatus != 0 {
-            let errorOutput = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw NSError(domain: "PlutilErrorDomain", code: Int(process.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey: errorOutput])
-        }
-    }
-
     init(msgsBakDirPath: String, idNamedHandles: [String:String]) {
-        self.msgsBakDirPath = msgsBakDirPath
-        self.idNamedHandles = idNamedHandles
         self.fileManager = FileManager.default
-        self.tempDirectoryURL = self.fileManager.temporaryDirectory
     }
 
-    func readXMLFile(at url: URL) throws {
-        let data = try Data(contentsOf: url)
-        let parser = XMLParser(data: data)
-        let delegate = XMLParserDelegateImpl(messageSource: self)
-        parser.delegate = delegate
-
-        if !parser.parse() {
-            throw FileError.xmlParsingError
+    // Helper function to extract value from CFKeyedArchiverUID description
+    func extractValue(from uidDescription: String) -> Int? {
+        let pattern = "\\{value = (\\d+)\\}"
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+           let match = regex.firstMatch(in: uidDescription, options: [], range:
+                        NSRange(location: 0, length: uidDescription.count)) {
+            if let range = Range(match.range(at: 1), in: uidDescription) {
+                return Int(uidDescription[range])
+            }
         }
+        return nil
     }
 
-    class XMLParserDelegateImpl: NSObject, XMLParserDelegate {
-        var depth = 0
-        var elementStack: [String] = []
-        var outerKey: String?
-        var objectsArrayString: String?
-        var objectClassKey: String?
-        var objectClassUID: Int?
-        var objectKey: String?
-        weak var messageSource: MessageSource_Archive?
-
-        init(messageSource: MessageSource_Archive) {
-            self.messageSource = messageSource
+    // Helper function to resolve CFKeyedArchiverUID references
+    func resolveUID(_ uid: Any, from objects: [Any]) -> Any? {
+        if let uidValue = extractValue(from: "\(uid)"), uidValue < objects.count {
+            return objects[uidValue]
         }
-
-        func parser(_ parser: XMLParser, didStartElement elementName: String,
-                    namespaceURI: String?, qualifiedName qName: String?,
-                    attributes attributeDict: [String : String] = [:]) {
-            elementStack.append(elementName)
-            depth += 1
-            if debug > 1 {
-                print("\(indent(depth))\(depth) <\(elementName)>")
-            }
-        }
-
-        func parser(_ parser: XMLParser, foundCharacters string: String) {
-            let trimmedString = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            let currentElement = elementStack.last
-
-            switch depth {
-            case 3:
-                if currentElement == "key" {
-                    outerKey = trimmedString
-                    if debug > 1 {
-                        print("key = '\(trimmedString)'")
-                    }
-                }
-            case 4:
-                if outerKey == "$objects" && currentElement == "string" {
-                    objectsArrayString = trimmedString
-                    if debug > 1 {
-                        print("objectsArrayString = '\(trimmedString)'")
-                    }
-                }
-            case 5:
-                if currentElement == "key" {
-                    objectKey = trimmedString
-                    if debug > 1 {
-                        print("objectKey = '\(trimmedString)'")
-                    }
-                } else if currentElement == "string" {
-                    if objectClassUID == 18 && objectKey == "NS.string" {
-                        let message = Message()
-                        message.who = "Unknown"
-                        message.text = trimmedString
-                        messageSource?.messages.append(message)
-                        if debug > 0 {
-                            print("message = '\(trimmedString)'")
-                        }
-                     }
-                }
-           case 6:
-                if objectKey == "$class" {
-                    if currentElement == "key" {
-                        objectClassKey = trimmedString
-                        if debug > 1 {
-                            print("objectClassKey = '\(trimmedString)'")
-                        }
-                    } else if currentElement == "integer" {
-                        if objectClassKey == "CF$UID" {
-                            objectClassUID = Int(trimmedString)
-                            if debug > 1 {
-                                print("objectClassUID = \(objectClassUID ?? -1)")
-                            }
-                        }
-                    }
-                }
-            default:
-                break
-            }
-        }
-
-        func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?,
-                    qualifiedName qName: String?) {
-            if debug > 1 {
-                print("\(indent(depth))\(depth) </\(elementName)>")
-            }
-            depth -= 1
-            elementStack.removeLast()
-        }
+        return nil
     }
 
+    // Unarchive a .ichat file and add to messages array
     func gatherMessagesFrom(ichatFile fileURL: URL) {
-        print("Processing .ichat file: \(fileURL.path)")
-
-        let uniqueFilename = UUID().uuidString
-        let tempFileURL = tempDirectoryURL.appendingPathComponent(uniqueFilename
-            ).appendingPathExtension("xml")
-        do {
-            try convertBinaryPlistToXML(atPath: fileURL.path, outputPath: tempFileURL.path)
-            //print("Conversion successful, created \(tempFileURL.path)")
-        } catch {
-            print("Error during conversion to XML: \(error)")
-        }
-        do {
-            try readXMLFile(at: tempFileURL)
-            print("Read \(tempFileURL.path).")
-        } catch {
-            print("Error during XML processing: \(error)")
-        }
-    }
-
-    // Function to unarchive a .ichat file and print the contents
-    func unarchiveIChatFile(fileURL: URL) {
         do {
             // Read the file data
             let fileData = try Data(contentsOf: fileURL)
-        
-            // Register custom classes
-            NSKeyedUnarchiver.setClass(InstantMessage.self, forClassName: "InstantMessage")
-            NSKeyedUnarchiver.setClass(Presentity.self, forClassName: "Presentity")
-            NSKeyedUnarchiver.setClass(NSParagraphStyle.self, forClassName: "NSParagraphStyle")
-            NSKeyedUnarchiver.setClass(NSMutableParagraphStyle.self, forClassName:
-                                        "NSMutableParagraphStyle")
-        
-            // Attempt to unarchive the data
-            if let unarchivedObject = try NSKeyedUnarchiver.unarchivedObject(ofClasses:
-                    [NSDictionary.self, NSArray.self, NSMutableArray.self, NSString.self,
-                     NSMutableString.self, NSMutableAttributedString.self, NSDate.self,
-                     NSParagraphStyle.self, NSMutableParagraphStyle.self, NSNumber.self,
-                     Presentity.self, InstantMessage.self],
-                    from: fileData) {
-            
-                if let unarchivedDict = unarchivedObject as? NSDictionary {
-                    print("Unarchived Dictionary: \(unarchivedDict)")
-                
-                    if let topDict = unarchivedDict["$top"] as? NSDictionary {
-                        if let metadataRef = topDict["metadata"] as? NSDictionary,
-                           let rootRef = topDict["root"] as? NSDictionary,
-                           let metadataUID = metadataRef["CF$UID"] as? Int,
-                           let rootUID = rootRef["CF$UID"] as? Int {
-                        
-                            if let objects = unarchivedDict["$objects"] as? NSArray {
-                                let metadataObject = objects[metadataUID]
-                                let rootObject = objects[rootUID]
-                            
-                                print("Metadata Object: \(metadataObject)")
-                                print("Root Object: \(rootObject)")
-                            
-                                // Example of resolving a string object
-                                if let messageDict = objects[17] as? NSDictionary,
-                                   let messageString = messageDict["NS.string"] as? String {
-                                    print("Message: \(messageString)")
-                                }
-                            } else {
-                                print("Failed to cast '$objects' to NSArray.")
-                            }
-                        } else {
-                            print("Failed to extract 'metadata' or 'root' references.")
-                        }
-                    } else {
-                        print("Failed to cast '$top' to NSDictionary.")
-                    }
-                } else {
-                    print("Failed to cast unarchived object to NSDictionary.")
-                    print(" Unarchived object: \(unarchivedObject)")
-                }
-            } else {
-                print("Unarchived object is nil.")
+
+            // Deserialize the plist
+            var format = PropertyListSerialization.PropertyListFormat.xml
+            guard let plist = try PropertyListSerialization.propertyList(from: fileData, options: .mutableContainersAndLeaves, format: &format) as? [String: Any] else {
+                print("Failed to parse plist.")
+                return
             }
+            print("Parsed Plist: \(plist)")
+
+            // Access the $top dictionary
+            guard let topDict = plist["$top"] as? [String: Any] else {
+                print("Failed to cast '$top' to dictionary.")
+                return
+            }
+            print("Top Dictionary: \(topDict)")
+
+            // Extract the CF$UID references for metadata and root
+            guard let metadataRef = topDict["metadata"], let rootRef = topDict["root"],
+                  let objects = plist["$objects"] as? [Any] else {
+                print("Failed to extract 'metadata' or 'root' refs or cast '$objects' to array.")
+                return
+            }
+
+            // Resolve the metadata object using its UID reference
+            guard let metadataObject = resolveUID(metadataRef, from: objects) as? [String: Any] else {
+                print("Failed to retrieve metadata object.")
+                return
+            }
+            print("Metadata Object: \(metadataObject)")
+
+            // Resolve the root object using its UID reference
+            guard let rootRaw = resolveUID(rootRef, from: objects) else {
+                print("Failed to retrieve root object.")
+                return
+            }
+            print("Root Raw Object: \(rootRaw)")
+
+            // Check if the rootRaw object is a dictionary and extract the array from NS.objects
+            guard let rootDict = rootRaw as? [String: Any],
+                  let rootArray = rootDict["NS.objects"] as? NSArray else {
+                print("Failed to cast root object to dictionary or extract NS.objects.")
+                return
+            }
+            print("Root Array: \(rootArray)")
+
+            // Extract the InstantMessage references array
+            guard let imsArrayDict = resolveUID(rootArray[2], from: objects) as? [String: Any],
+                  let imsArray = imsArrayDict["NS.objects"] as? NSArray else {
+                print("Failed to cast InstantMessage array.")
+                return
+            }
+
+            // Iterate over InstantMessages
+            for (index, imRef) in imsArray.enumerated() {
+                let imRef2 = imsArray[index]
+                guard let im = resolveUID(imRef2, from: objects) as? [String:Any] else {
+                    print("Failed to cast InstantMessage \(index).")
+                    return
+                }
+                // Handle InstantMessage elements
+                print("InstantMessage[\(index)] = \(im)")
+                print("InstantMessage[\(index)][\"Subject\"] = \(String(describing: im["Subject"]))")
+                //let sender = im["Sender"]
+                let message = Message()
+                guard let textRef = im["OriginalMessage"],
+                      let text = resolveUID(textRef, from: objects) else {
+                    print("Failed to cast InstantMessage.OriginalMessage.")
+                    return
+                }
+                print("OriginalMessage = \(String(describing: text))")
+                //message.text = im["OriginalMessage"]
+                //messages.append(message)
+            }
+
         } catch {
             print("Error unarchiving file: \(error)")
         }
@@ -430,8 +347,7 @@ class MessageSource_Archive {
 
                 for ichatFile in ichatFilesToProcess {
                     // Process the .ichat file
-                    //gatherMessagesFrom(ichatFile: ichatFile)
-                    unarchiveIChatFile(fileURL: ichatFile)
+                    gatherMessagesFrom(ichatFile: ichatFile)
                 }
             }
         } catch {
