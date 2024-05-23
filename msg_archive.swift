@@ -40,7 +40,7 @@ class MessageSource_Archive {
     var myID: String? = nil
     var messages: [Message] = []
 
-    init(msgsBakDirPath: String, idNamedHandles: [String:String]) {
+    init() {
         self.fileManager = FileManager.default
     }
 

@@ -189,8 +189,7 @@ class HTML {
         append(tag: "body", content: body)
     }
 
-    func appendMessages(archivePath: String? = nil, year: Int, msgsBakDirPath: String,
-                        extAttDir: String? = nil) {
+    func appendMessages(source: String, year: Int, extAttDir: String? = nil) {
         let fileManager = FileManager.default
 
         if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
@@ -205,29 +204,30 @@ class HTML {
             }
         }
 
-        let handlesName = "chat_handles.json"
-        let handlesPath = msgsBakDirPath + handlesName
-        var idNamedHandles: [String:String] = [:]
-        if fileManager.fileExists(atPath: handlesPath) {
-            do {
-                let url = URL(fileURLWithPath: handlesPath)
-                let data = try Data(contentsOf: url)
-                idNamedHandles = try JSONSerialization.jsonObject(with: data,
-                                                                  options: []) as! [String: String]
-            } catch {
-                fatalError("Reading database handles file \(handlesPath)")
-            }
-        }
-
         var messages: [Message] = []
-        if let archivePath = archivePath {
-            let msgSrc = MessageSource_Archive(msgsBakDirPath: msgsBakDirPath,
-                                               idNamedHandles: idNamedHandles)
-            messages = msgSrc.getMessages(inArchive: archivePath, forYear: year)
-        } else {
+        if source.hasSuffix("db") {
+            /*
+            let handlesName = "chat_handles.json"
+            let handlesURL = URL(string: source)?.deletingLastPathComponent().appending(path: handlesName)
+            var idNamedHandles: [String:String] = [:]
+            if let url = handlesURL,
+               fileManager.fileExists(atPath: handlesURL!.path) {
+                do {
+                    let data = try Data(contentsOf: url)
+                    idNamedHandles = try JSONSerialization.jsonObject(with: data,
+                                                                      options: []) as! [String: String]
+                } catch {
+                    fatalError("Reading database handles file \(url.path)")
+                }
+            }
+
             let msgSrc = MessageSource_ChatDB(msgsBakDirPath: msgsBakDirPath,
                                               idNamedHandles: idNamedHandles)
             messages = msgSrc.getMessagesFor(year: year)
+             */
+        } else {
+            let msgSrc = MessageSource_Archive()
+            messages = msgSrc.getMessages(inArchive: source, forYear: year)
         }
 
         var prevDay = 0
@@ -289,9 +289,31 @@ class HTML {
 
 }
 
-func msg2html() {
-    let fileManager = FileManager.default
+/// Convert one year of messages in database db to an HTML file.
+///
+/// - Parameters:
+///   - from: Database file or archive directory path string.
+///   - attachments: Attachments directory path string.
+///   - forYear: Desired year as an integer.
+///   - externalAttachmentLibrary: Optional external attachments directory for additional attachments.
+///   - toHtmlFile: Output file base name.
+func convertMessages(from source: String, attachments: String,
+                     externalAttachmentLibrary: String? = nil,
+                     forYear year: Int, toHtmlFile: String) {
+    
+    // if external Attributes directory path given, make a list of files there
+    // ** TODO **
+    
+    // convert all messages in database
+    let html = HTML()
+    //let year = Calendar.current.component(.year, from: Date())
+    html.appendMessages(source: source, year: year)
+    html.write(file: toHtmlFile + "\(year).html")
+}
 
+func msg2html() {
+
+    /*
     let msgsBakName = "messages_icloud_bak"
     let docsPath = try? fileManager.url(
         for: .documentDirectory,
@@ -312,20 +334,16 @@ func msg2html() {
             fatalError("Creating backup folder \(msgsBakDirPath)")
         }
     }
-
-    //let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-    //print("Current Directory: \(currentDirectoryURL.path)")
-
-    let macbakURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("github").appendingPathComponent("macbak")
-    let archiveURL = macbakURL.appendingPathComponent("TestArchive")
+*/
+    let fileManager = FileManager.default
+    let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
+    print("Current Directory: \(currentDirectoryURL.path)")
+    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
+    let archiveAttachments = currentDirectoryURL.appendingPathComponent("TestAttachments").path
     let archiveYear = 2019
 
-    let html = HTML()
-    //let year = Calendar.current.component(.year, from: Date())
-    let year = archiveYear
-    html.appendMessages(archivePath: archiveURL.path, year: year, msgsBakDirPath: msgsBakDirPath)
-    html.write(file: msgsBakDirPath + "\(year).html")
+    convertMessages(from: archivePath, attachments: archiveAttachments, forYear: archiveYear,
+                    toHtmlFile: "testOut")
 }
 
 /*
