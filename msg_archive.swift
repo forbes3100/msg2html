@@ -14,6 +14,12 @@
 
 import Foundation
 
+extension String {
+    func trimmingLeadingPlus() -> String {
+        return String(self.drop(while: { $0 == "+" }))
+    }
+}
+
 enum FileError: Error {
     case xmlParsingError(String)
 }
@@ -66,7 +72,7 @@ class MessageSource_Archive {
     }
 
     class Presentity {
-        var anonymousKey: String
+        var id: String
         var name: String
         var isMe: Bool
         weak var parent: MessageSource_Archive?
@@ -75,21 +81,14 @@ class MessageSource_Archive {
             guard let presentity = objects[uid] as? [String: Any] else {
                 throw FileError.xmlParsingError("Failed to cast Presentity at UID \(uid).")
             }
-            guard let anonymousKeyRef = presentity["AnonymousKey"] else {
-                throw FileError.xmlParsingError("Failed to parse AnonymousKey reference.")
+
+            guard let idRef = presentity["ID"],
+                  let idFull = parent.resolveUID(idRef, from: objects) as? String else {
+                throw FileError.xmlParsingError("Failed to cast Presentity.ID.")
             }
-            var anonymousKey = ""
-            if let _ = anonymousKeyRef as? Bool {
-            } else {
-                guard let key = parent.resolveUID(anonymousKeyRef, from: objects) as? String else {
-                    throw FileError.xmlParsingError("Failed to cast AnonymousKey.")
-                }
-                anonymousKey = key
-            }
-            print("AnonymousKey = '\(anonymousKey)'")
-            self.anonymousKey = anonymousKey
-            self.name = parent.participantNamesByID[anonymousKey] ?? ""
-            self.isMe = (anonymousKey == parent.myID)
+            self.id = idFull.trimmingLeadingPlus()
+            self.name = parent.participantNamesByID[id] ?? ""
+            self.isMe = (id == parent.myID)
         }
     }
 
@@ -182,6 +181,7 @@ class MessageSource_Archive {
         }
 
         // Iterate over InstantMessages
+        var presentities: [Int: Presentity] = [:]
         for (index, imRef) in imsArray.enumerated() {
             guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
                 throw FileError.xmlParsingError("Failed to cast InstantMessage \(index).")
@@ -191,7 +191,6 @@ class MessageSource_Archive {
             //print("InstantMessage[\(index)] = \(im)")
 
             let message = Message()
-            var presentities: [Int: Presentity] = [:]
             guard let senderRef = im["Sender"],
                   let senderUID = extractValue(from: "\(senderRef)") else {
                 throw FileError.xmlParsingError("Failed to cast InstantMessage.Sender.")
@@ -203,6 +202,7 @@ class MessageSource_Archive {
             let sender = presentities[senderUID]!
             message.who = sender.name
             message.isFromMe = sender.isMe
+            message.rowid = index
 
             guard let dateRef = im["Time"],
                   let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
