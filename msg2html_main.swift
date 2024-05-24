@@ -37,7 +37,9 @@ struct ConvertMessagesToHTML: ParsableCommand {
         if let last = Int(endYear ?? startYear),
            let start = Int(startYear) {
             for year in start...last {
-                convert(source: "chat.db", attachments: "Attachments", year: year, externalAttachmentLibrary: externalAttachmentLibrary, output: "\(year)\(extra)")
+                convertMessages(from: "chat.db", attachments: "Attachments",
+                                externalAttachmentLibrary: externalAttachmentLibrary,
+                                forYear: year, toHtmlFile: "\(year)\(extra)")
             }
         }
     }
