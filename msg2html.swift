@@ -262,6 +262,14 @@ class HTML {
                     prevWho = who
                 }
             }
+            // TODO: use output(text:)
+            html.append("""
+                <div\(css!.con_class)><div\(css!.flex_class)>
+                <p\(css!.text_class)>\(msg.text ?? "")</p>
+                </div></div>""
+"""
+            )
+
             prevDay = day
         }
     }
@@ -276,9 +284,11 @@ class HTML {
             }
 
             // Write the content to the file
+            print("Writing \(fileURL.path)")
             let out = try FileHandle(forWritingTo: fileURL)
             defer { out.closeFile() }
 
+            out.truncateFile(atOffset: 0)
             out.write(htmlHead.data(using: .utf8)!)
             out.write(html.data(using: .utf8)!)
             out.write(htmlTail.data(using: .utf8)!)
