@@ -220,9 +220,21 @@ class MessageSource_Archive {
             print("Message[\(index)].GUID = \(guid)")
             message.guid = guid
 
-            guard let textRef = im["OriginalMessage"],
-                  let text = resolveUID(textRef, from: objects) as? String else {
-                throw FileError.xmlParsingError("Failed to cast InstantMessage.OriginalMessage.")
+            var text = ""
+            if let textRef = im["OriginalMessage"] {
+                guard let orignalText = resolveUID(textRef, from: objects) as? String else {
+                    throw FileError.xmlParsingError("Failed to cast InstantMessage.OriginalMessage.")
+                }
+                text = orignalText
+            } else {
+                guard let textRef = im["MessageText"],
+                      let textDict = resolveUID(textRef, from: objects) as? [String: Any],
+                      let nsStringRef = textDict["NSString"],
+                      let nsStringDict = resolveUID(nsStringRef, from: objects) as? [String: Any],
+                      let msgText = nsStringDict["NS.string"] as? String else {
+                    throw FileError.xmlParsingError("Failed to cast InstantMessage.MessageText.")
+                }
+                text = msgText
             }
             print("Message[\(index)] = '\(text)'")
             message.text = text
