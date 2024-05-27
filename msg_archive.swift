@@ -290,6 +290,11 @@ class MessageSource_Archive {
         }
         //print("Root: \(root)")
 
+        // Extract the service name
+        guard let service = resolveUID(root[0], from: objects) as? String else {
+            fatalError("Failed to get service name.")
+        }
+
         // Extract the InstantMessage references array
         guard let imsDict = resolveUID(root[2], from: objects) as? [String: Any],
               let ims = imsDict["NS.objects"] as? NSArray else {
@@ -318,6 +323,7 @@ class MessageSource_Archive {
             message.fileName = fileURL.path
             let sender = presentities[senderUID]!
             message.who = sender.name
+            message.svc = service
             message.isFromMe = sender.isMe
             message.rowid = index
             print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")

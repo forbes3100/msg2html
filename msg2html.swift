@@ -16,7 +16,7 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
-let debug = 1
+let debug = 0
 var haveLinks: Bool = false
 var attDirUrl: URL?
 var extAttFiles: [String: URL]?
@@ -53,10 +53,9 @@ let htmlHead = """
     background-color: #ffffff;
     color: #505050;
     font-size: 70%;
-    margin-top: 20px;
+    margin-top: 3px;
     margin-bottom: 0px;
-    margin-left: 400px;
-    margin-right: 10px;
+    text-align: center;
 }
 .i   {
     background-color: #ffffff;
@@ -79,13 +78,17 @@ let htmlHead = """
     margin-right: 10px;
 }
 .c   {
-    margin-top: 5px;
+    margin-top: 1px;
     margin-right: 300px;
 }
 .cm  {
-    margin-top: 0px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center; /* Align items vertically if needed */
+    margin-top: 1px;
     margin-left: 250px;
     margin-right: 10px;
+    text-align: right;
 }
 .me  {
     background-color: #1b86fd;
@@ -101,6 +104,8 @@ let htmlHead = """
     font-size: 80%;
     font-family: verdana;
     width: fit-content;
+    margin-top: 1px;
+    margin-bottom: 0px;
     margin-left: auto;
 }
 .n   {
@@ -109,6 +114,8 @@ let htmlHead = """
     font-size: 70%;
     margin-top: 0px;
     margin-bottom: 0px;
+    padding-top: 1px;
+    padding-bottom: 1px;
     margin-left: 40px;
 }
 p    {
@@ -117,8 +124,10 @@ p    {
     font-size: 80%;
     color: #000000;
     font-family: verdana;
-    padding: 5px;
+    padding: 4px;
     width: fit-content;
+    margin-top: 2px;
+    margin-bottom: 2px;
 }
 </style>
 </head>
@@ -333,7 +342,9 @@ class HTML {
                 let dateStr = String(describing: aDate)
                 html.append("<p\(css.info_class)>a_path=\(aPath), \(mimeTStr), \(dateStr)</p>\n")
             } else {
-                html.append("<p\(css.info_class)>\(aPath)</p>\n")
+                if debug > 0 {
+                    html.append("<p\(css.info_class)>\(aPath)</p>\n")
+                }
             }
 
             if let mimeType = mimeT, mimeType.hasPrefix("audio") {
@@ -366,7 +377,11 @@ class HTML {
                     }
                 }
 
-                html.append("<img\(css.img_class) src=\"\(aPath)\" width=\"\(aWidth)\">\n")
+                html.append(
+                    "<div\(css.con_class)><div\(css.flex_class)>\n"
+                    + "<img\(css.img_class) src=\"\(aPath)\" width=\"\(aWidth)\">\n"
+                    + "</div></div>\n"
+                )
 
                 if (links != nil) && !msg.isFromMe {
                     addLinkTo(imageFileHtml: aPath, mime_t: mimeT!)
@@ -424,6 +439,10 @@ class HTML {
         print("============== writing HTML ===============")
         for msg in messages {
 
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "M/d/yy, h:mm a"
+            let dateStr = dateFormatter.string(from: msg.date)
+
             print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
             let calendar = Calendar.current
             if calendar.component(.year, from: msg.date) != year {
@@ -436,22 +455,31 @@ class HTML {
             }
 
             css = CSS(isFromMe: msg.isFromMe, svc: msg.svc)
+            let who = msg.who
             if msg.isFromMe {
-                append(tag: "p", attributes: ["class": "d"], content: """
-                           \(msg.date) - from me, \(msg.svc)
-                           #\(msg.rowid)
-                           """)
+                if debug > 0 {
+                    append(tag: "p", attributes: ["class": "d"], content: """
+                               \(msg.date) - from me, \(msg.svc)
+                               #\(msg.rowid)
+                               """)
+                }
             } else {
-                let who = msg.who
-                append(tag: "p", attributes: ["class": "d"], content: """
-                           \(msg.date) - from \(who ?? "Unknown"), \(msg.svc)
-                           #\(msg.rowid)
-                           """)
-                if who != prevWho || day != prevDay {
-                    append(tag: "p", attributes: ["class": "n"], content: who ?? "Unknown")
-                    prevWho = who
+                if debug > 0 {
+                    append(tag: "p", attributes: ["class": "d"], content: """
+                               \(msg.date) - from \(who ?? "Unknown"), \(msg.svc)
+                               #\(msg.rowid)
+                               """)
                 }
             }
+            if who != prevWho || day != prevDay {
+                html.append(
+                    "<div style=\"display: flex; flex-direction: column; align-items: center\">\n"
+                    + "<p class=\"n\">\(msg.svc) with \(who ?? "Unknown")</p>"
+                    + "<p class=\"n\">\(dateStr)</p>"
+                    + "</div>\n"
+                )
+            }
+            prevWho = who
             prevDay = day
 
             // Possible cases:
