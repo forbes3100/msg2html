@@ -72,6 +72,7 @@ func findGUIDSubdirectory(in attachmentsDirectory: URL, guid: String) -> URL? {
 
 class MessageSource_Archive {
     private var fileManager: FileManager
+    var attachmentsURL: URL!
     var participantNamesByID: [String: String] = [:]
     var myID: String? = nil
     var messages: [Message] = []
@@ -178,11 +179,36 @@ class MessageSource_Archive {
         }
     }
 
+    // Parse message style/attachment and return attached file's URL, if any.
+    func parse(styleAttachment: [String: Any], from objects: [Any],
+                       parent: MessageSource_Archive) -> URL? {
+        let attachmentDict = ArchiveNSDictionary(styleAttachment, from: objects, parent: self)
+        //print("\(attachmentDict)")
+        if let fileGUID = attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
+           let fileName = attachmentDict["__kIMFilenameAttributeName"] as? String {
+            // have attached file's path: return URL if file exists
+            if let guidDirectory = findGUIDSubdirectory(in: parent.attachmentsURL, guid: fileGUID) {
+                let attachmentURL = guidDirectory.appendingPathComponent(fileName)
+                if debug > 1 {
+                    let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
+                    print("Attachment: \(d)/\(fileName)")
+                }
+                return attachmentURL
+            } else {
+                // no attachment, just text style
+                return nil
+            }
+        }
+        // no attachment, just simple text style
+        return nil
+    }
+
     // Unarchive a .ichat file and add to messages array
     func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
         print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
+        self.attachmentsURL = attachmentsURL
         print("attachmentURL=\(attachmentsURL.lastPathComponent))")
 
         // Deserialize the plist
@@ -343,26 +369,20 @@ class MessageSource_Archive {
                     // skip the first element in the NSAttributes array (the styles)
                     for (index, attachmentRef) in nsAttributesArray.dropFirst().enumerated() {
                         print("Attachment \(index): \(attachmentRef)")
-                        guard let attachment = resolveUID(attachmentRef, from: objects) else {
+                        guard let styleAttachment = resolveUID(attachmentRef,
+                                                          from: objects) as? [String:Any] else {
                             fatalError("Failed to get attachment \(index)")
                         }
-                        let attachmentDict = ArchiveNSDictionary(attachment, from: objects,
-                                                                 parent: self)
-                        //print("\(attachmentDict)")
-                        if let fileGUID =
-                                attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
-                           let fileName =
-                                attachmentDict["__kIMFilenameAttributeName"] as? String {
-                            if let guidDirectory = findGUIDSubdirectory(in: attachmentsURL,
-                                                                        guid: fileGUID) {
-                                //let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
-                                //print("GUID directory found: \(d)")
-                                let attachmentURL = guidDirectory.appendingPathComponent(fileName)
-                                attachments.append(attachmentURL)
-                            } else {
-                                print("GUID directory not found")
-                            }
+                        if let attachment = parse(styleAttachment: styleAttachment,
+                                              from: objects, parent: self) {
+                            attachments.append(attachment)
                         }
+                    }
+                } else if nsAttributesClassName == "NSDictionary" {
+                    // if MessageText.NSAttributes is a dictionary, it's a single style+attachment
+                    if let attachment = parse(styleAttachment: nsAttributes,
+                                          from: objects, parent: self) {
+                        attachments.append(attachment)
                     }
                 }
 
