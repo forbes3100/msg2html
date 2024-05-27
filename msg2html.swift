@@ -13,12 +13,32 @@
 // GNU General Public License for more details.
 
 import Foundation
+import AppKit
+import UniformTypeIdentifiers
 
 let debug = 1
 var haveLinks: Bool = false
 var attDirUrl: URL?
 var extAttFiles: [String: URL]?
-var css: CSS?
+
+extension String {
+    func htmlEscaped() -> String {
+        var result = self
+        let escapeMapping: [Character: String] = [
+            "<": "&lt;",
+            ">": "&gt;",
+            "&": "&amp;",
+            "\"": "&quot;",
+            "'": "&#x27;",
+        ]
+
+        for (key, value) in escapeMapping {
+            result = result.replacingOccurrences(of: String(key), with: value)
+        }
+
+        return result
+    }
+}
 
 // Common HTML head and foot, including CSS
 // classes are: d=date, i=my_info, j=info, c=container, cm=my_container,
@@ -140,6 +160,7 @@ struct CSS {
 }
 
 class Message {
+    var fileName: String
     var who: String?
     var rowid: Int
     var date: Date
@@ -149,8 +170,10 @@ class Message {
     var handleID: Int
     var text: String?
     var svc: String
+    var attachments: [URL]
 
     init() {
+        self.fileName = ""
         self.who = ""
         self.rowid = -1
         self.date = Date()
@@ -160,10 +183,12 @@ class Message {
         self.handleID = -1
         self.text = nil
         self.svc = ""
+        self.attachments = []
     }
 
-    init(who: String?, rowid: Int, date: Date, guid: String, isFromMe: Bool, hasAttach: Bool,
-         handleID: Int, text: String?, svc: String) {
+    init(fileName: String, who: String?, rowid: Int, date: Date, guid: String, isFromMe: Bool,
+         hasAttach: Bool, handleID: Int, text: String?, svc: String, attachments: [URL]) {
+        self.fileName = fileName
         self.who = who
         self.rowid = rowid
         self.date = date
@@ -173,11 +198,14 @@ class Message {
         self.handleID = handleID
         self.text = text
         self.svc = svc
+        self.attachments = attachments
     }
 }
 
 class HTML {
     private var html = ""
+    var css: CSS?
+    var links: String? = nil
 
     func append(tag: String, attributes: [String: String] = [:], content: String? = nil) {
         let a = attributes.map { " \($0.key)=\"\($0.value)\"" }.joined()
@@ -189,7 +217,163 @@ class HTML {
         append(tag: "body", content: body)
     }
 
-    func appendMessages(source: String, year: Int, extAttDir: String? = nil) {
+    // Create a (unique) symlink to imageFileH in the links dir.
+    func addLinkTo(imageFileHtml: String, mime_t: String) {
+        if mime_t.prefix(5) == "image" {
+            let imageFile = imageFileHtml.replacingOccurrences(of: "%23", with: "#")
+            let imagePath = URL(fileURLWithPath: imageFile).standardizedFileURL.path
+
+            if !FileManager.default.fileExists(atPath: imagePath) {
+                return
+            }
+
+            let imageName = URL(fileURLWithPath: imageFile).lastPathComponent
+            var link = URL(fileURLWithPath: links!).appendingPathComponent(imageName)
+            var seq = 0
+            let linkName = link.deletingPathExtension().lastPathComponent
+            let linkExt = link.pathExtension
+
+            while FileManager.default.fileExists(atPath: link.path) {
+                seq += 1
+                link = URL(fileURLWithPath: links!).appendingPathComponent(
+                    "\(linkName)_\(seq).\(linkExt)")
+            }
+
+            try? FileManager.default.createSymbolicLink(at: link,
+                                        withDestinationURL: URL(fileURLWithPath: imagePath))
+        }
+    }
+
+    func getMimeTypeAndDate(for fileURL: URL) -> (mimeType: String?, fileDate: String?) {
+        var mimeType: String? = nil
+        var fileDate: String? = nil
+        
+        // Get the MIME type using UTType
+        if let fileType = UTType(filenameExtension: fileURL.pathExtension) {
+            mimeType = fileType.preferredMIMEType
+        } else {
+            // Fallback method to determine MIME type based on file extension
+            switch fileURL.pathExtension.lowercased() {
+            case "jpg", "jpeg":
+                mimeType = "image/jpeg"
+            case "png":
+                mimeType = "image/png"
+            case "gif":
+                mimeType = "image/gif"
+            case "heic":
+                mimeType = "image/heic"
+            case "m4a":
+                mimeType = "audio/x-m4a"
+            default:
+                mimeType = "application/octet-stream"
+            }
+        }
+        
+        // Get the file modification date
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+            if let modificationDate = attributes[.modificationDate] as? Date {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                fileDate = dateFormatter.string(from: modificationDate)
+            }
+        } catch {
+            print("Error getting file attributes: \(error.localizedDescription)")
+        }
+        
+        return (mimeType, fileDate)
+    }
+
+    /// Write text to output as HTML, converting emoji.
+    func output(text: String) {
+        print("output(text: \"\(text)\")")
+        if let css = self.css {
+            if debug > 0 {
+                let utext = text.unicodeScalars.map { String(format: " \\u{%X}", $0.value) }.joined()
+                html.append("<p\(css.info_class)>text(\(text.count)) = \(utext)</p>\n")
+            }
+            
+            if !text.isEmpty {
+                let text = text.htmlEscaped().replacingOccurrences(of: "\n", with: "<br>")
+                
+                html.append(
+                    "<div\(css.con_class)><div\(css.flex_class)>\n"
+                    + "<p\(css.text_class)>\(text)</p>\n"
+                    + "</div></div>\n"
+                )
+            }
+        }
+    }
+
+    /// Convert a message attachment to HTML.
+    ///
+    /// - Parameters:
+    ///   - attachmentNo: attachment sequence number
+    ///   - msg: Message
+    func output(attachmentNo: Int, msg: Message) {
+        let fileManager = FileManager.default
+        let attFileURL = msg.attachments[attachmentNo]
+
+        guard let css = css else { return }
+
+        print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
+        if debug > 1 {
+            html.append("<p\(css.info_class)>attFileURL=\(attFileURL.path)</p>\n")
+        }
+
+        if fileManager.fileExists(atPath: attFileURL.path) {
+            var aPath = attFileURL.path
+            let aWidth = 300
+            let aSplitExt = (aPath as NSString).pathExtension
+            let isPP = aSplitExt == "pluginPayloadAttachment"
+            var (mimeT, aDate) = getMimeTypeAndDate(for: attFileURL)
+
+            if debug > 1 {
+                html.append("<p\(css.info_class)>a_path=\(aPath), \(String(describing: mimeT)), \(String(describing: aDate))</p>\n")
+            } else {
+                html.append("<p\(css.info_class)>\(aPath)</p>\n")
+            }
+
+            if let mimeType = mimeT, mimeType.hasPrefix("audio") {
+                html.append("""
+                <audio controls>
+                <source src="\(aPath)" type="audio/x-m4a">
+                Your browser does not support the audio tag.
+                </audio>\n
+                """)
+            } else if !isPP {
+                if mimeT == "image/heic" {
+                    let jpegPath = (aPath as NSString).deletingPathExtension + ".jpeg"
+                    let jpegURL = URL(fileURLWithPath: jpegPath)
+                    
+                    if !fileManager.fileExists(atPath: jpegPath) {
+                        if let image = NSImage(contentsOfFile: aPath) {
+                            if let tiffData = image.tiffRepresentation,
+                               let bitmap = NSBitmapImageRep(data: tiffData),
+                               let jpegData = bitmap.representation(using: .jpeg, properties: [:]) {
+                                try? jpegData.write(to: jpegURL)
+                            }
+                        }
+                    }
+                    aPath = jpegPath
+                    mimeT = "image/jpeg"
+                    if debug > 1 {
+                        html.append("<p\(css.info_class)>\(aPath), \(String(describing: mimeT)), \(String(describing: aDate))</p>\n")
+                    }
+                }
+
+                html.append("<img\(css.img_class) src=\"\(aPath)\" width=\"\(aWidth)\">\n")
+
+                if (links != nil) && !msg.isFromMe {
+                    addLinkTo(imageFileHtml: aPath, mime_t: mimeT!)
+                }
+            }
+        } else {
+            html.append("<p\(css.info_class)>Expected file! \(attFileURL.path)</p>\n")
+        }
+    }
+
+    func appendMessages(source: String, attachments: String, year: Int, extAttDir: String? = nil) {
         let fileManager = FileManager.default
 
         if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
@@ -227,14 +411,16 @@ class HTML {
              */
         } else {
             let msgSrc = MessageSource_Archive()
-            messages = msgSrc.getMessages(inArchive: source, forYear: year)
+            messages = msgSrc.getMessages(inArchive: source, attachments: attachments, forYear: year)
         }
 
         var prevDay = 0
         var prevWho: String? = nil
 
+        print("============== writing HTML ===============")
         for msg in messages {
 
+            print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
             let calendar = Calendar.current
             if calendar.component(.year, from: msg.date) != year {
                 continue
@@ -262,15 +448,33 @@ class HTML {
                     prevWho = who
                 }
             }
-            // TODO: use output(text:)
-            html.append("""
-                <div\(css!.con_class)><div\(css!.flex_class)>
-                <p\(css!.text_class)>\(msg.text ?? "")</p>
-                </div></div>""
-"""
-            )
-
             prevDay = day
+
+            // Possible cases:
+            //   text
+            //   attachment
+            //   text 0, attachment 0, [text 1, attachment 1, ...] text n
+            if let text = msg.text {
+                let replaceObjToken = "\u{fffc}"
+                var i = text.startIndex
+                var seq = 0
+                
+                while let range = text.range(of: replaceObjToken, range: i..<text.endIndex) {
+                    let precedingText = String(text[i..<range.lowerBound])
+                    output(text: precedingText)
+                    i = range.upperBound
+                    output(attachmentNo: seq, msg: msg)
+                    seq += 1
+                }
+                
+                // Output the remaining text after the last placeholder
+                if i < text.endIndex {
+                    let remainingText = String(text[i..<text.endIndex])
+                    output(text: remainingText)
+                }
+            } else {
+                output(attachmentNo: 0, msg: msg)
+            }
         }
     }
 
@@ -311,13 +515,13 @@ func convertMessages(from source: String, attachments: String,
                      externalAttachmentLibrary: String? = nil,
                      forYear year: Int, toHtmlFile: String) {
     
-    // if external Attributes directory path given, make a list of files there
+    // if external attachments directory path given, make a list of files there
     // ** TODO **
     
     // convert all messages in database
     let html = HTML()
     //let year = Calendar.current.component(.year, from: Date())
-    html.appendMessages(source: source, year: year)
+    html.appendMessages(source: source, attachments: attachments, year: year)
     html.write(file: toHtmlFile + "\(year).html")
 }
 
@@ -350,75 +554,8 @@ func msg2html() {
     print("Current Directory: \(currentDirectoryURL.path)")
     let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
     let archiveAttachments = currentDirectoryURL.appendingPathComponent("TestAttachments").path
-    let archiveYear = 2019
+    let archiveYear = 2024
 
     convertMessages(from: archivePath, attachments: archiveAttachments, forYear: archiveYear,
                     toHtmlFile: "testOut")
 }
-
-/*
-
-// Create a (unique) symlink to imageFileH in the links dir.
-func addLinkTo(imageFileHtml: String, mime_t: String) {
-    if mime_t.prefix(5) == "image" {
-        let imageFile = imageFileHtml.replacingOccurrences(of: "%23", with: "#")
-        let imagePath = URL(fileURLWithPath: imageFile).standardizedFileURL.path
-
-        if !FileManager.default.fileExists(atPath: imagePath) {
-            return
-        }
-
-        let imageName = URL(fileURLWithPath: imageFile).lastPathComponent
-        var link = URL(fileURLWithPath: links).appendingPathComponent(imageName)
-        var seq = 0
-        let linkName = link.deletingPathExtension().lastPathComponent
-        let linkExt = link.pathExtension
-
-        while FileManager.default.fileExists(atPath: link.path) {
-            seq += 1
-            link = URL(fileURLWithPath: links).appendingPathComponent("\(linkName)_\(seq).\(linkExt)")
-        }
-
-        try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: imagePath))
-    }
-}
-
-func output(text: String) {
-    if let out = outFileHandle {
-        if debug > 0 {
-            let utext = text.unicodeScalars.map { String(format: "\\u{%X}", $0.value) }.joined()
-            out.write("<p\(css.info_class)>text(\(text.count)) = \(utext)</p>\n")
-        }
-
-        if !text.isEmpty {
-            let text = text.htmlEscaped().replacingOccurrences(of: "\n", with: "<br>")
-
-            out.write(
-                "<div\(css.con_class)><div\(css.flex_class)>\n"
-                + "<p\(css.text_class)>\(text)</p>\n"
-                + "</div></div>\n"
-            )
-        }
-    }
-}
-
-extension String {
-    func htmlEscaped() -> String {
-        var result = self
-        let escapeMapping: [Character: String] = [
-            "<": "&lt;",
-            ">": "&gt;",
-            "&": "&amp;",
-            "\"": "&quot;",
-            "'": "&#x27;",
-        ]
-
-        for (key, value) in escapeMapping {
-            result = result.replacingOccurrences(of: String(key), with: value)
-        }
-
-        return result
-    }
-}
-
-*/
