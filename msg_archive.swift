@@ -51,7 +51,8 @@ func findGUIDSubdirectory(in attachmentsDirectory: URL, guid: String) -> URL? {
                                 includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
             for item in contents {
                 var isDirectory: ObjCBool = false
-                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory) && isDirectory.boolValue {
+                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory)
+                        && isDirectory.boolValue {
                     if item.lastPathComponent == guid {
                         return item
                     } else if let found = searchDirectory(at: item) {
@@ -106,14 +107,14 @@ class MessageSource_Archive {
         var isMe: Bool
         weak var parent: MessageSource_Archive?
 
-        init (uid: Int, from objects: [Any], parent: MessageSource_Archive) throws {
+        init (uid: Int, from objects: [Any], parent: MessageSource_Archive) {
             guard let presentity = objects[uid] as? [String: Any] else {
-                throw FileError.xmlParsingError("Failed to cast Presentity at UID \(uid).")
+                fatalError("Failed to cast Presentity at UID \(uid).")
             }
 
             guard let idRef = presentity["ID"],
                   let idFull = parent.resolveUID(idRef, from: objects) as? String else {
-                throw FileError.xmlParsingError("Failed to cast Presentity.ID.")
+                fatalError("Failed to cast Presentity.ID.")
             }
             self.id = idFull.trimmingLeadingPlus()
             self.name = parent.participantNamesByID[id] ?? ""
@@ -181,18 +182,20 @@ class MessageSource_Archive {
     func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
-        print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent), attachmentURL=\(attachmentsURL.lastPathComponent))")
+        print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
+        print("attachmentURL=\(attachmentsURL.lastPathComponent))")
 
         // Deserialize the plist
         var format = PropertyListSerialization.PropertyListFormat.xml
-        guard let plist = try PropertyListSerialization.propertyList(from: fileData, options: .mutableContainersAndLeaves, format: &format) as? [String: Any] else {
-            throw FileError.xmlParsingError("Failed to parse plist.")
+        guard let plist = try PropertyListSerialization.propertyList(from: fileData,
+                    options: .mutableContainersAndLeaves, format: &format) as? [String: Any] else {
+            fatalError("Failed to parse plist.")
         }
         //print("Parsed Plist: \(plist)")
 
         // Access the $top dictionary
         guard let topDict = plist["$top"] as? [String: Any] else {
-            throw FileError.xmlParsingError("Failed to cast '$top' to dictionary.")
+            fatalError("Failed to cast '$top' to dictionary.")
         }
         //print("Top Dictionary: \(topDict)")
 
@@ -200,13 +203,13 @@ class MessageSource_Archive {
         guard let metadataRef = topDict["metadata"],
               let rootRef = topDict["root"],
               let objects = plist["$objects"] as? [Any] else {
-            throw FileError.xmlParsingError("Failed to extract 'metadata' or 'root' refs or cast '$objects' to array.")
+            fatalError("Failed to extract 'metadata' or 'root' refs or cast '$objects' to array.")
         }
 
         // Resolve the metadata object using its UID reference
         guard let metadataDict = resolveUID(metadataRef, from: objects) as? [String: Any],
               let metadataArray = metadataDict["NS.objects"] as? NSArray else {
-            throw FileError.xmlParsingError("Failed to retrieve metadata object.")
+            fatalError("Failed to retrieve metadata object.")
         }
         //print("Metadata Object: \(metadataObject)")
 
@@ -214,23 +217,23 @@ class MessageSource_Archive {
         let participantsRef = metadataArray[4]
         guard let participantsDict = resolveUID(participantsRef, from: objects) as? [String: Any],
               let participantsArray = participantsDict["NS.objects"] as? NSArray else {
-            throw FileError.xmlParsingError("Failed to cast metadata.Participants.")
+            fatalError("Failed to cast metadata.Participants.")
         }
 
         // Get presentity IDs from metadata
         let presentityIDsRef = metadataArray[6]
         guard let presentityIDsDict = resolveUID(presentityIDsRef, from: objects) as? [String: Any],
               let presentityIDsArray = presentityIDsDict["NS.objects"] as? NSArray else {
-            throw FileError.xmlParsingError("Failed to cast metadata.PresentityIDs.")
+            fatalError("Failed to cast metadata.PresentityIDs.")
         }
 
         // Assign names to IDs
         for (participantRef, presentityIDRef) in zip(participantsArray, presentityIDsArray) {
             guard let participant = resolveUID(participantRef, from: objects) as? String else {
-                throw FileError.xmlParsingError("Failed to cast Participant.")
+                fatalError("Failed to cast Participant.")
             }
             guard let presentityIDObject = resolveUID(presentityIDRef, from: objects) else {
-                throw FileError.xmlParsingError("Failed to cast PresentityID object.")
+                fatalError("Failed to cast PresentityID object.")
             }
             var presentityID = ""
             if let presentityIDMString = presentityIDObject as? [String: Any],
@@ -239,7 +242,7 @@ class MessageSource_Archive {
             } else if let id = presentityIDObject as? String {
                 presentityID = id
             } else {
-                throw FileError.xmlParsingError("Failed to cast PresentityID.")
+                fatalError("Failed to cast PresentityID.")
             }
             participantNamesByID[presentityID] = participant
             // First presentity is owner's
@@ -250,28 +253,28 @@ class MessageSource_Archive {
 
         // Resolve the root object using its UID reference
         guard let rootRaw = resolveUID(rootRef, from: objects) else {
-            throw FileError.xmlParsingError("Failed to retrieve root object.")
+            fatalError("Failed to retrieve root object.")
         }
         //print("Root Raw Object: \(rootRaw)")
 
         // Check if the rootRaw object is a dictionary and extract the array from NS.objects
         guard let rootDict = rootRaw as? [String: Any],
               let root = rootDict["NS.objects"] as? NSArray else {
-            throw FileError.xmlParsingError("Failed to cast root object to dictionary or extract NS.objects.")
+            fatalError("Failed to cast root object to dictionary or extract NS.objects.")
         }
         //print("Root: \(root)")
 
         // Extract the InstantMessage references array
         guard let imsDict = resolveUID(root[2], from: objects) as? [String: Any],
               let ims = imsDict["NS.objects"] as? NSArray else {
-            throw FileError.xmlParsingError("Failed to cast InstantMessage array.")
+            fatalError("Failed to cast InstantMessage array.")
         }
 
         // Iterate over InstantMessages
         var presentities: [Int: Presentity] = [:]
         for (index, imRef) in ims.enumerated() {
             guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
-                throw FileError.xmlParsingError("Failed to cast InstantMessage \(index).")
+                fatalError("Failed to cast InstantMessage \(index).")
             }
 
             // Handle InstantMessage elements
@@ -280,11 +283,11 @@ class MessageSource_Archive {
             let message = Message()
             guard let senderRef = im["Sender"],
                   let senderUID = extractValue(from: "\(senderRef)") else {
-                throw FileError.xmlParsingError("Failed to cast InstantMessage.Sender.")
+                fatalError("Failed to cast InstantMessage.Sender.")
             }
             print("Message[\(index)].Sender UID = \(senderUID)")
             if !presentities.keys.contains(senderUID) {
-                try presentities[senderUID] = Presentity(uid: senderUID, from: objects, parent: self)
+                presentities[senderUID] = Presentity(uid: senderUID, from: objects, parent: self)
             }
             message.fileName = fileURL.path
             let sender = presentities[senderUID]!
@@ -298,7 +301,7 @@ class MessageSource_Archive {
             guard let dateRef = im["Time"],
                   let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
                   let timeInterval = dateDict["NS.time"] as? TimeInterval else {
-                throw FileError.xmlParsingError("Failed to cast InstantMessage.Date.")
+                fatalError("Failed to cast InstantMessage.Date.")
             }
             let date = convertNSTimeIntervalToDate(timeInterval)
             print("Message[\(index)].Date = \(formatDate(date))")
@@ -307,7 +310,7 @@ class MessageSource_Archive {
             // Get message Globally Unique Identifier
             guard let guidRef = im["GUID"],
                   let guid = resolveUID(guidRef, from: objects) as? String else {
-                throw FileError.xmlParsingError("Failed to cast InstantMessage.GUID.")
+                fatalError("Failed to cast InstantMessage.GUID.")
             }
             print("Message[\(index)].GUID = \(guid)")
             message.guid = guid
@@ -322,7 +325,7 @@ class MessageSource_Archive {
                       let nsAttributesRef = textDict["NSAttributes"],
                       let nsAttributes = resolveUID(nsAttributesRef,
                                                         from: objects) as? [String: Any] else {
-                    throw FileError.xmlParsingError("Failed to cast InstantMessage.MessageText.")
+                    fatalError("Failed to cast InstantMessage.MessageText.")
                 }
 
                 guard let nsAttributesClassRef = nsAttributes["$class"],
@@ -352,7 +355,7 @@ class MessageSource_Archive {
                                 attachmentDict["__kIMFilenameAttributeName"] as? String {
                             if let guidDirectory = findGUIDSubdirectory(in: attachmentsURL,
                                                                         guid: fileGUID) {
-                                let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
+                                //let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
                                 //print("GUID directory found: \(d)")
                                 let attachmentURL = guidDirectory.appendingPathComponent(fileName)
                                 attachments.append(attachmentURL)
@@ -366,13 +369,13 @@ class MessageSource_Archive {
                 guard let nsStringRef = textDict["NSString"],
                       let nsStringDict = resolveUID(nsStringRef, from: objects) as? [String: Any],
                       let msgText = nsStringDict["NS.string"] as? String else {
-                    throw FileError.xmlParsingError("Failed to cast InstantMessage.MessageText.")
+                    fatalError("Failed to cast InstantMessage.MessageText.")
                 }
                 text = msgText
             } else {
                 guard let textRef = im["OriginalMessage"],
                       let orignalText = resolveUID(textRef, from: objects) as? String else {
-                    throw FileError.xmlParsingError("Failed to cast InstantMessage.OriginalMessage.")
+                    fatalError("Failed to cast InstantMessage.OriginalMessage.")
                 }
                 text = orignalText
             }
@@ -392,8 +395,8 @@ class MessageSource_Archive {
         do {
             // Get the contents of the directory
             let subdirectories = try fileManager.contentsOfDirectory(
-                at: directoryURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles,
-                                                                             .skipsSubdirectoryDescendants])
+                at: directoryURL, includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
 
             // Filter for subdirectories that start with the specified year
             let yr = "\(year)"
@@ -403,8 +406,8 @@ class MessageSource_Archive {
             for subdirectory in yearSubdirectories {
                 // Get the contents of the subdirectory
                 let ichatFiles = try fileManager.contentsOfDirectory(
-                    at: subdirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles,
-                                                                                 .skipsSubdirectoryDescendants])
+                    at: subdirectory, includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
 
                 // Filter for .ichat files
                 let ichatFilesToProcess = ichatFiles.filter { $0.pathExtension == "ichat" }

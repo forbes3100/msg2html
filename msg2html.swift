@@ -329,7 +329,9 @@ class HTML {
             var (mimeT, aDate) = getMimeTypeAndDate(for: attFileURL)
 
             if debug > 1 {
-                html.append("<p\(css.info_class)>a_path=\(aPath), \(String(describing: mimeT)), \(String(describing: aDate))</p>\n")
+                let mimeTStr = String(describing: mimeT)
+                let dateStr = String(describing: aDate)
+                html.append("<p\(css.info_class)>a_path=\(aPath), \(mimeTStr), \(dateStr)</p>\n")
             } else {
                 html.append("<p\(css.info_class)>\(aPath)</p>\n")
             }
@@ -358,7 +360,9 @@ class HTML {
                     aPath = jpegPath
                     mimeT = "image/jpeg"
                     if debug > 1 {
-                        html.append("<p\(css.info_class)>\(aPath), \(String(describing: mimeT)), \(String(describing: aDate))</p>\n")
+                        let mimeTStr = String(describing: mimeT)
+                        let dateStr = String(describing: aDate)
+                        html.append("<p\(css.info_class)>\(aPath), \(mimeTStr), \(dateStr)</p>\n")
                     }
                 }
 
