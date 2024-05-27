@@ -125,6 +125,7 @@ class MessageSource_ChatDB {
                     let who = handles[handleId]
 
                     let msg = Message(
+                        fileName: "db",
                         who: who,
                         rowid: rowid,
                         date: date,
@@ -133,7 +134,8 @@ class MessageSource_ChatDB {
                         hasAttach: hasAttach,
                         handleID: handleId,
                         text: text,
-                        svc: svc
+                        svc: svc,
+                        attachments: []
                     )
 
                     let calendar = Calendar.current
