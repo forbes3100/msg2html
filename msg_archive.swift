@@ -13,6 +13,7 @@
 // GNU General Public License for more details.
 
 import Foundation
+import CryptoKit
 
 extension String {
     func trimmingLeadingPlus() -> String {
@@ -39,6 +40,34 @@ func formatDate(_ date: Date) -> String {
     dateFormatter.timeZone = TimeZone.current // Use the current timezone
     return dateFormatter.string(from: date)
 }
+
+func findGUIDSubdirectory(in attachmentsDirectory: URL, guid: String) -> URL? {
+    let fileManager = FileManager.default
+    
+    // Function to recursively search for the GUID directory
+    func searchDirectory(at url: URL) -> URL? {
+        do {
+            let contents = try fileManager.contentsOfDirectory(at: url,
+                                includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory) && isDirectory.boolValue {
+                    if item.lastPathComponent == guid {
+                        return item
+                    } else if let found = searchDirectory(at: item) {
+                        return found
+                    }
+                }
+            }
+        } catch {
+            print("Error reading directory: \(error)")
+        }
+        return nil
+    }
+    
+    return searchDirectory(at: attachmentsDirectory)
+}
+
 
 class MessageSource_Archive {
     private var fileManager: FileManager
@@ -92,10 +121,67 @@ class MessageSource_Archive {
         }
     }
 
+    class ArchiveNSDictionary {
+        var keys: [String]
+        var objects: [Any]
+        weak var parent: MessageSource_Archive?
+
+        init(_ xml: Any, from objects: [Any], parent: MessageSource_Archive) {
+            guard let xmlDict = xml as? [String: Any],
+                  let nsKeys = xmlDict["NS.keys"] as? [Any] else {
+                fatalError("Failed to find NS.keys in an Archive NSDictionary")
+            }
+            self.keys = []
+            for keyRef in nsKeys {
+                guard let keyName = parent.resolveUID(keyRef, from: objects) as? String else {
+                    fatalError("Failed to get key in an Archive NSDictionary")
+                }
+                self.keys.append(keyName)
+            }
+            guard let nsObjects = xmlDict["NS.objects"] as? [Any] else {
+                fatalError("Failed to find NS.objects in an Archive NSDictionary")
+            }
+            self.objects = []
+            for objectRef in nsObjects {
+                guard let object = parent.resolveUID(objectRef, from: objects) else {
+                    fatalError("Failed to get object in an Archive NSDictionary")
+                }
+                self.objects.append(object)
+            }
+            self.parent = parent
+        }
+
+        // Subscript to access values by key (getter only)
+        subscript(key: String) -> Any? {
+            get {
+                if let index = keys.firstIndex(of: key) {
+                    return objects[index]
+                }
+                return nil
+            }
+        }
+
+        // Function to get all keys
+        func allKeys() -> [String] {
+            return keys
+        }
+
+        // Function to get all values
+        func allValues() -> [Any] {
+            return objects
+        }
+
+        // Function to get the count of key-value pairs
+        func count() -> Int {
+            return keys.count
+        }
+    }
+
     // Unarchive a .ichat file and add to messages array
-    func gatherMessagesFrom(ichatFile fileURL: URL) throws {
+    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
+        print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent), attachmentURL=\(attachmentsURL.lastPathComponent))")
 
         // Deserialize the plist
         var format = PropertyListSerialization.PropertyListFormat.xml
@@ -111,7 +197,8 @@ class MessageSource_Archive {
         //print("Top Dictionary: \(topDict)")
 
         // Extract the CF$UID references for metadata and root
-        guard let metadataRef = topDict["metadata"], let rootRef = topDict["root"],
+        guard let metadataRef = topDict["metadata"],
+              let rootRef = topDict["root"],
               let objects = plist["$objects"] as? [Any] else {
             throw FileError.xmlParsingError("Failed to extract 'metadata' or 'root' refs or cast '$objects' to array.")
         }
@@ -169,27 +256,27 @@ class MessageSource_Archive {
 
         // Check if the rootRaw object is a dictionary and extract the array from NS.objects
         guard let rootDict = rootRaw as? [String: Any],
-              let rootArray = rootDict["NS.objects"] as? NSArray else {
+              let root = rootDict["NS.objects"] as? NSArray else {
             throw FileError.xmlParsingError("Failed to cast root object to dictionary or extract NS.objects.")
         }
-        //print("Root Array: \(rootArray)")
+        //print("Root: \(root)")
 
         // Extract the InstantMessage references array
-        guard let imsArrayDict = resolveUID(rootArray[2], from: objects) as? [String: Any],
-              let imsArray = imsArrayDict["NS.objects"] as? NSArray else {
+        guard let imsDict = resolveUID(root[2], from: objects) as? [String: Any],
+              let ims = imsDict["NS.objects"] as? NSArray else {
             throw FileError.xmlParsingError("Failed to cast InstantMessage array.")
         }
 
         // Iterate over InstantMessages
         var presentities: [Int: Presentity] = [:]
-        for (index, imRef) in imsArray.enumerated() {
+        for (index, imRef) in ims.enumerated() {
             guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
                 throw FileError.xmlParsingError("Failed to cast InstantMessage \(index).")
             }
 
             // Handle InstantMessage elements
             //print("InstantMessage[\(index)] = \(im)")
-
+            // Insure that the message sender's Presentity record is in presentities dict
             let message = Message()
             guard let senderRef = im["Sender"],
                   let senderUID = extractValue(from: "\(senderRef)") else {
@@ -199,11 +286,15 @@ class MessageSource_Archive {
             if !presentities.keys.contains(senderUID) {
                 try presentities[senderUID] = Presentity(uid: senderUID, from: objects, parent: self)
             }
+            message.fileName = fileURL.path
             let sender = presentities[senderUID]!
             message.who = sender.name
             message.isFromMe = sender.isMe
             message.rowid = index
+            print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
+            print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
 
+            // Get message date and time
             guard let dateRef = im["Time"],
                   let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
                   let timeInterval = dateDict["NS.time"] as? TimeInterval else {
@@ -213,6 +304,7 @@ class MessageSource_Archive {
             print("Message[\(index)].Date = \(formatDate(date))")
             message.date = date
 
+            // Get message Globally Unique Identifier
             guard let guidRef = im["GUID"],
                   let guid = resolveUID(guidRef, from: objects) as? String else {
                 throw FileError.xmlParsingError("Failed to cast InstantMessage.GUID.")
@@ -220,31 +312,82 @@ class MessageSource_Archive {
             print("Message[\(index)].GUID = \(guid)")
             message.guid = guid
 
+            // Get message attributes (including attachments) and text
             var text = ""
-            if let textRef = im["OriginalMessage"] {
-                guard let orignalText = resolveUID(textRef, from: objects) as? String else {
-                    throw FileError.xmlParsingError("Failed to cast InstantMessage.OriginalMessage.")
+            var attachments: [URL] = []
+            if let textRef = im["MessageText"] {
+                // parse text's NSMutableAttributedString
+                guard let textDict = resolveUID(textRef, from: objects) as? [String: Any],
+                      // parse attributes first
+                      let nsAttributesRef = textDict["NSAttributes"],
+                      let nsAttributes = resolveUID(nsAttributesRef,
+                                                        from: objects) as? [String: Any] else {
+                    throw FileError.xmlParsingError("Failed to cast InstantMessage.MessageText.")
                 }
-                text = orignalText
-            } else {
-                guard let textRef = im["MessageText"],
-                      let textDict = resolveUID(textRef, from: objects) as? [String: Any],
-                      let nsStringRef = textDict["NSString"],
+
+                guard let nsAttributesClassRef = nsAttributes["$class"],
+                      let nsAttributesClass = resolveUID(nsAttributesClassRef,
+                                                         from: objects) as? [String: Any?],
+                      let nsAttributesClassName = nsAttributesClass["$classname"] as? String else {
+                    fatalError("Failed to get InstantMessage.MessageText.NSAttributes.$class")
+                }
+
+                // if MessageText.NSAttributes is an array, it contains attachments
+                if nsAttributesClassName == "NSMutableArray" {
+                    guard let nsAttributesArray = nsAttributes["NS.objects"] as? [Any] else {
+                        fatalError("Failed to get InstantMessage.MessageText.NSAttributes objects")
+                    }
+                    // skip the first element in the NSAttributes array (the styles)
+                    for (index, attachmentRef) in nsAttributesArray.dropFirst().enumerated() {
+                        print("Attachment \(index): \(attachmentRef)")
+                        guard let attachment = resolveUID(attachmentRef, from: objects) else {
+                            fatalError("Failed to get attachment \(index)")
+                        }
+                        let attachmentDict = ArchiveNSDictionary(attachment, from: objects,
+                                                                 parent: self)
+                        //print("\(attachmentDict)")
+                        if let fileGUID =
+                                attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
+                           let fileName =
+                                attachmentDict["__kIMFilenameAttributeName"] as? String {
+                            if let guidDirectory = findGUIDSubdirectory(in: attachmentsURL,
+                                                                        guid: fileGUID) {
+                                let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
+                                //print("GUID directory found: \(d)")
+                                let attachmentURL = guidDirectory.appendingPathComponent(fileName)
+                                attachments.append(attachmentURL)
+                            } else {
+                                print("GUID directory not found")
+                            }
+                        }
+                    }
+                }
+
+                guard let nsStringRef = textDict["NSString"],
                       let nsStringDict = resolveUID(nsStringRef, from: objects) as? [String: Any],
                       let msgText = nsStringDict["NS.string"] as? String else {
                     throw FileError.xmlParsingError("Failed to cast InstantMessage.MessageText.")
                 }
                 text = msgText
+            } else {
+                guard let textRef = im["OriginalMessage"],
+                      let orignalText = resolveUID(textRef, from: objects) as? String else {
+                    throw FileError.xmlParsingError("Failed to cast InstantMessage.OriginalMessage.")
+                }
+                text = orignalText
             }
             print("Message[\(index)] = '\(text)'")
             message.text = text
+            message.attachments = attachments
             messages.append(message)
         }
     }
 
-    func getMessages(inArchive directoryPath: String, forYear year: Int) -> [Message] {
+    func getMessages(inArchive directoryPath: String, attachments: String,
+                     forYear year: Int) -> [Message] {
         messages = []
         let directoryURL = URL(fileURLWithPath: directoryPath)
+        let attachmentsURL = URL(fileURLWithPath: attachments)
 
         do {
             // Get the contents of the directory
@@ -268,7 +411,7 @@ class MessageSource_Archive {
 
                 for ichatFile in ichatFilesToProcess {
                     // Process the .ichat file
-                    try gatherMessagesFrom(ichatFile: ichatFile)
+                    try gatherMessagesFrom(ichatFile: ichatFile, attachmentsURL: attachmentsURL)
                 }
             }
         } catch let FileError.xmlParsingError(message) {
