@@ -554,7 +554,7 @@ func convertMessages(from source: String, attachments: String,
     let html = HTML()
     //let year = Calendar.current.component(.year, from: Date())
     html.appendMessages(source: source, attachments: attachments, year: year)
-    html.write(file: toHtmlFile + "\(year).html")
+    html.write(file: toHtmlFile + ".html")
 }
 
 func msg2html() {

@@ -8,19 +8,20 @@
 import XCTest
 
 final class Msg2HtmlTests: XCTestCase {
-    let year = 2021
+    let year = 2024
     let debug = true
-    let htmlName = "test_\(2021)_\(true)"
-    let htmlFile = "test_\(2021)_\(true).html"
-    let heicJpeg = "path/to/heic_jpeg_file.jpg" // Replace with actual path if needed
-
-    let msg1a = "Message 1a text"
-    let msg1b = "Message 1b text"
-    let msg2 = "Message 2 text"
-    let msg3 = "Message 3 text"
+    var htmlName = ""
+    var htmlFile = ""
+    let heicJpeg = "TestAttachments/05/ef/at_0_1234_5678/HEART.jpeg"
+    let msg1a = "Test message 1a."
+    let msg1b = "After."
+    let msg2 = "Test message 2."
+    let msg3 = "Test message 3."
 
     override func setUpWithError() throws {
         // Called before each test method
+        htmlName = "test_\(year)_\(true)"
+        htmlFile = "test_\(year)_\(true).html"
         if FileManager.default.fileExists(atPath: htmlFile) {
             try FileManager.default.removeItem(atPath: htmlFile)
         }
@@ -32,16 +33,14 @@ final class Msg2HtmlTests: XCTestCase {
     func testConvertOneYear() throws {
         XCTAssertFalse(FileManager.default.fileExists(atPath: htmlFile))
         XCTAssertFalse(FileManager.default.fileExists(atPath: heicJpeg))
-/*
-        let dbName = "path/to/db_name" // Replace with actual path
-        let attDir = "path/to/att_dir" // Replace with actual path
+
+        let archiveDir = "TestArchive"
+        let attDir = "TestAttachments"
         let extAttDir: String? = nil
 
-        // Assuming msg2html has a method convert() similar to the Python version
-        //try msg2html.convert(dbName: dbName, attDir: attDir, year: year, extAttDir: extAttDir,
-        //                     htmlName: htmlName, debug: debug)
-
-        XCTAssertTrue(FileManager.default.fileExists(atPath: htmlFile))
+        convertMessages(from: archiveDir, attachments: attDir, externalAttachmentLibrary: extAttDir, forYear: year, toHtmlFile: htmlName)
+        let htmlFileURL = URL(fileURLWithPath: htmlFile)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: htmlFileURL.path))
 
         let text = try String(contentsOfFile: htmlFile, encoding: .utf8)
 
@@ -59,6 +58,5 @@ final class Msg2HtmlTests: XCTestCase {
 
         XCTAssertTrue(indexMsg1a < indexMsg1b)
         XCTAssertTrue(indexMsg1b < indexMsg2)
- */
     }
 }
