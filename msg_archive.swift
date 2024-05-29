@@ -372,13 +372,13 @@ class MessageSource_Archive {
                     guard let nsAttributesArray = nsAttributes["NS.objects"] as? [Any] else {
                         fatalError("Failed to get InstantMessage.MessageText.NSAttributes objects")
                     }
-                    // skip the first element in the NSAttributes array (the styles)
-                    for (index, attachmentRef) in nsAttributesArray.dropFirst().enumerated() {
+                    for (index, attachmentRef) in nsAttributesArray.enumerated() {
                         print("Attachment \(index): \(attachmentRef)")
                         guard let styleAttachment = resolveUID(attachmentRef,
                                                           from: objects) as? [String:Any] else {
                             fatalError("Failed to get attachment \(index)")
                         }
+                        // ignore style-only element, but get styled attachment
                         if let attachment = parse(styleAttachment: styleAttachment,
                                               from: objects, parent: self) {
                             attachments.append(attachment)
@@ -412,11 +412,10 @@ class MessageSource_Archive {
         }
     }
 
-    func getMessages(inArchive directoryPath: String, attachments: String,
+    func getMessages(inArchive directoryPath: String, attachmentsURL: URL,
                      forYear year: Int) -> [Message] {
         messages = []
         let directoryURL = URL(fileURLWithPath: directoryPath)
-        let attachmentsURL = URL(fileURLWithPath: attachments)
 
         do {
             // Get the contents of the directory

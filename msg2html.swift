@@ -322,16 +322,16 @@ class HTML {
     func output(attachmentNo: Int, msg: Message) {
         let fileManager = FileManager.default
         let attFileURL = msg.attachments[attachmentNo]
+        var aPath = attFileURL.pathComponents.suffix(5).joined(separator: "/")
 
         guard let css = css else { return }
 
         print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
         if debug > 1 {
-            html.append("<p\(css.info_class)>attFileURL=\(attFileURL.path)</p>\n")
+            html.append("<p\(css.info_class)>attFileURL=\(aPath)</p>\n")
         }
 
         if fileManager.fileExists(atPath: attFileURL.path) {
-            var aPath = attFileURL.path
             let aWidth = 300
             let aSplitExt = (aPath as NSString).pathExtension
             let isPP = aSplitExt == "pluginPayloadAttachment"
@@ -392,8 +392,10 @@ class HTML {
         }
     }
 
-    func appendMessages(source: String, attachments: String, year: Int, extAttDir: String? = nil) {
+    func appendMessages(source: String, htmlDirURL: URL, attachments: String, year: Int,
+                        extAttDir: String? = nil) {
         let fileManager = FileManager.default
+        let attachmentsURL = htmlDirURL.appendingPathComponent(attachments)
 
         if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
             var files = [String]()
@@ -430,7 +432,7 @@ class HTML {
              */
         } else {
             let msgSrc = MessageSource_Archive()
-            messages = msgSrc.getMessages(inArchive: source, attachments: attachments, forYear: year)
+            messages = msgSrc.getMessages(inArchive: source, attachmentsURL: attachmentsURL, forYear: year)
         }
 
         var prevDay = 0
@@ -539,11 +541,12 @@ class HTML {
 ///
 /// - Parameters:
 ///   - from: Database file or archive directory path string.
-///   - attachments: Attachments directory path string.
+///   - htmlDir: Directory path string, containing attachments directory, where HTML file is to be written.
+///   - attachments: Attachments directory name.
 ///   - forYear: Desired year as an integer.
 ///   - externalAttachmentLibrary: Optional external attachments directory for additional attachments.
 ///   - toHtmlFile: Output file base name.
-func convertMessages(from source: String, attachments: String,
+func convertMessages(from source: String, htmlDir: String, attachments: String,
                      externalAttachmentLibrary: String? = nil,
                      forYear year: Int, toHtmlFile: String) {
     
@@ -553,8 +556,9 @@ func convertMessages(from source: String, attachments: String,
     // convert all messages in database
     let html = HTML()
     //let year = Calendar.current.component(.year, from: Date())
-    html.appendMessages(source: source, attachments: attachments, year: year)
-    html.write(file: toHtmlFile + ".html")
+    let htmlDirURL = URL(fileURLWithPath: htmlDir)
+    html.appendMessages(source: source, htmlDirURL: htmlDirURL, attachments: attachments, year: year)
+    html.write(file: htmlDirURL.appendingPathComponent(toHtmlFile + ".html").path)
 }
 
 func msg2html() {
@@ -584,10 +588,14 @@ func msg2html() {
     let fileManager = FileManager.default
     let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
     print("Current Directory: \(currentDirectoryURL.path)")
-    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
-    let archiveAttachments = currentDirectoryURL.appendingPathComponent("TestAttachments").path
-    let archiveYear = 2024
+//    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
+//    let archiveAttachments = "TestAttachments"
+//    let archiveYear = 2024
+    let htmlDir = "/Volumes/SSD01A/msgs_from_archive"
+    let archivePath = htmlDir + "/Archive"
+    let archiveAttachments = "Attachments"
+    let year = 2016
 
-    convertMessages(from: archivePath, attachments: archiveAttachments, forYear: archiveYear,
-                    toHtmlFile: "testOut")
+    convertMessages(from: archivePath, htmlDir: htmlDir, attachments: archiveAttachments,
+                    forYear: year, toHtmlFile: "testOut\(year)")
 }
