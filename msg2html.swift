@@ -14,7 +14,7 @@
 
 import Foundation
 import AppKit
-import UniformTypeIdentifiers
+//import UniformTypeIdentifiers
 
 let debug = 0
 var haveLinks: Bool = false
@@ -278,9 +278,9 @@ class HTML {
         var fileDate: String? = nil
         
         // Get the MIME type using UTType
-        if let fileType = UTType(filenameExtension: fileURL.pathExtension) {
-            mimeType = fileType.preferredMIMEType
-        } else {
+        //if let fileType = UTType(filenameExtension: fileURL.pathExtension) {
+        //    mimeType = fileType.preferredMIMEType
+        //} else {
             // Fallback method to determine MIME type based on file extension
             switch fileURL.pathExtension.lowercased() {
             case "jpg", "jpeg":
@@ -296,7 +296,7 @@ class HTML {
             default:
                 mimeType = "application/octet-stream"
             }
-        }
+        //}
         
         // Get the file modification date
         do {
@@ -592,7 +592,7 @@ func convertMessages(from source: String, htmlDir: String, attachments: String,
     html.write(file: htmlDirURL.appendingPathComponent(toHtmlFile + ".html").path)
 }
 
-func msg2html() {
+func msg2html(htmlDir: String) {
 
     /*
     let msgsBakName = "messages_icloud_bak"
@@ -622,7 +622,7 @@ func msg2html() {
 //    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
 //    let archiveAttachments = "TestAttachments"
 //    let archiveYear = 2024
-    let htmlDir = "/Volumes/SSD01A/msgs_from_archive"
+
     let archivePath = htmlDir + "/Archive"
     let archiveAttachments = "Attachments"
     let year = 2016
