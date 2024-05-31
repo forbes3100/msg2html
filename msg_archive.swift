@@ -119,7 +119,7 @@ class MessageSource_Archive {
             }
             self.id = idFull.trimmingLeadingPlus()
             self.name = parent.participantNamesByID[id] ?? ""
-            self.isMe = (id == parent.myID)
+            self.isMe = id.starts(with: parent.myID ?? "-")
         }
     }
 
@@ -179,9 +179,9 @@ class MessageSource_Archive {
         }
     }
 
-    // Parse message style/attachment and return attached file's URL, if any.
+    // Parse message style/attachment and return attached file's name and URL, if any.
     func parse(styleAttachment: [String: Any], from objects: [Any],
-                       parent: MessageSource_Archive) -> URL? {
+                       parent: MessageSource_Archive) -> (String?, URL?) {
         let attachmentDict = ArchiveNSDictionary(styleAttachment, from: objects, parent: self)
         //print("\(attachmentDict)")
         if let fileGUID = attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
@@ -193,14 +193,14 @@ class MessageSource_Archive {
                     let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
                     print("Attachment: \(d)/\(fileName)")
                 }
-                return attachmentURL
+                return (fileName, attachmentURL)
             } else {
-                // no attachment, just text style
-                return nil
+                // return attachment file name, but no URL
+                return (fileName, nil)
             }
         }
         // no attachment, just simple text style
-        return nil
+        return (nil, nil)
     }
 
     // Unarchive a .ichat file and add to messages array
@@ -357,7 +357,7 @@ class MessageSource_Archive {
 
             // Get message attributes (including attachments) and text
             var text = ""
-            var attachments: [URL] = []
+            var attachments: [(String, URL?)] = []
             if let textRef = im["MessageText"] {
                 // parse text's NSMutableAttributedString
                 guard let textDict = resolveUID(textRef, from: objects) as? [String: Any],
@@ -387,16 +387,18 @@ class MessageSource_Archive {
                             fatalError("Failed to get attachment \(index)")
                         }
                         // ignore style-only element, but get styled attachment
-                        if let attachment = parse(styleAttachment: styleAttachment,
-                                              from: objects, parent: self) {
-                            attachments.append(attachment)
+                        let (fileName, attachment) = parse(styleAttachment: styleAttachment,
+                                                           from: objects, parent: self)
+                        if let fileName = fileName {
+                            attachments.append((fileName, attachment))
                         }
                     }
                 } else if nsAttributesClassName == "NSDictionary" {
                     // if MessageText.NSAttributes is a dictionary, it's a single style+attachment
-                    if let attachment = parse(styleAttachment: nsAttributes,
-                                          from: objects, parent: self) {
-                        attachments.append(attachment)
+                    let (fileName, attachment) = parse(styleAttachment: nsAttributes,
+                                                          from: objects, parent: self)
+                    if let fileName = fileName {
+                        attachments.append((fileName, attachment))
                     }
                 }
 

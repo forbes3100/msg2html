@@ -29,7 +29,7 @@ extension String {
             ">": "&gt;",
             "&": "&amp;",
             "\"": "&quot;",
-            "'": "&#x27;",
+            "'": "&#39;",
         ]
 
         for (key, value) in escapeMapping {
@@ -123,9 +123,9 @@ let htmlHead = """
 }
 .n   {
     background-color: #ffffff;
-    color: #c0c0c0;
+    color: #808080;
     font-size: 70%;
-    margin-top: 0px;
+    margin-top: 5px;
     margin-bottom: 0px;
     padding-top: 1px;
     padding-bottom: 1px;
@@ -133,7 +133,7 @@ let htmlHead = """
 }
 .top   {
     background-color: #ffffff;
-    color: #808080;
+    color: #202020;
     font-size: 70%;
     margin-top: 0px;
     margin-bottom: 0px;
@@ -154,6 +154,10 @@ p    {
 }
 .spaced-hr {
     margin-top: 60px;
+}
+.nofile {
+    background-color: #ffffff;
+    border: 2px solid #808080;
 }
 </style>
 </head>
@@ -207,7 +211,7 @@ class Message {
     var handleID: Int
     var text: String?
     var svc: String
-    var attachments: [URL]
+    var attachments: [(String, URL?)]
 
     init() {
         self.fileName = ""
@@ -227,7 +231,7 @@ class Message {
 
     init(fileName: String, who: String?, threadID: String, rowid: Int, date: Date, guid: String,
          isFirst: Bool, isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String,
-         attachments: [URL]) {
+         attachments: [(String, URL?)]) {
         self.fileName = fileName
         self.who = who
         self.threadID = threadID
@@ -355,23 +359,19 @@ class HTML {
     ///   - msg: Message
     func output(attachmentNo: Int, msg: Message) {
         let fileManager = FileManager.default
-        let attFileURL = msg.attachments[attachmentNo]
-        var aPath = attFileURL.pathComponents.suffix(5).joined(separator: "/")
-
+        let (fileName, url) = msg.attachments[attachmentNo]
         guard let css = css else { return }
-
         print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
-        if debug > 1 {
-            html.append("<p\(css.info_class)>attFileURL=\(aPath)</p>\n")
-        }
 
-        if fileManager.fileExists(atPath: attFileURL.path) {
+        if let url = url, fileManager.fileExists(atPath: url.path) {
+            var aPath = url.pathComponents.suffix(5).joined(separator: "/")
             let aWidth = 300
             let aSplitExt = (aPath as NSString).pathExtension
             let isPP = aSplitExt == "pluginPayloadAttachment"
-            var (mimeT, aDate) = getMimeTypeAndDate(for: attFileURL)
+            var (mimeT, aDate) = getMimeTypeAndDate(for: url)
 
             if debug > 1 {
+                html.append("<p\(css.info_class)>attFileURL=\(aPath)</p>\n")
                 let mimeTStr = String(describing: mimeT)
                 let dateStr = String(describing: aDate)
                 html.append("<p\(css.info_class)>a_path=\(aPath), \(mimeTStr), \(dateStr)</p>\n")
@@ -422,7 +422,11 @@ class HTML {
                 }
             }
         } else {
-            html.append("<p\(css.info_class)>Expected file! \(attFileURL.path)</p>\n")
+            var name = fileName
+            if let url = url {
+                name = url.path
+            }
+            html.append("<p class=\"nofile\">Missing file \"\(name)\"</p>\n")
         }
     }
 
