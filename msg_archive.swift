@@ -237,7 +237,9 @@ class MessageSource_Archive {
               let metadataArray = metadataDict["NS.objects"] as? NSArray else {
             fatalError("Failed to retrieve metadata object.")
         }
-        //print("Metadata Object: \(metadataObject)")
+        if debug > 1 {
+            print("Metadata Object: \(metadataArray)")
+        }
 
         // Get participant names from metadata
         let participantsRef = metadataArray[4]
@@ -288,7 +290,9 @@ class MessageSource_Archive {
               let root = rootDict["NS.objects"] as? NSArray else {
             fatalError("Failed to cast root object to dictionary or extract NS.objects.")
         }
-        //print("Root: \(root)")
+        if debug > 1 {
+            print("Root: \(root)")
+        }
 
         // Extract the service name
         guard let service = resolveUID(root[0], from: objects) as? String else {
@@ -325,6 +329,7 @@ class MessageSource_Archive {
             let sender = presentities[senderUID]!
             message.who = sender.name
             message.svc = service
+            message.threadID = sender.id
             message.isFirst = isFirst
             isFirst = false
             message.isFromMe = sender.isMe

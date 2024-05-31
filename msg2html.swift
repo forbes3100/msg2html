@@ -123,13 +123,23 @@ let htmlHead = """
 }
 .n   {
     background-color: #ffffff;
-    color: #505050;
+    color: #c0c0c0;
     font-size: 70%;
     margin-top: 0px;
     margin-bottom: 0px;
     padding-top: 1px;
     padding-bottom: 1px;
-    margin-left: 40px;
+    margin-left: 0px;
+}
+.top   {
+    background-color: #ffffff;
+    color: #808080;
+    font-size: 70%;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    margin-left: 0px;
 }
 p    {
     background-color: #e6e6e6;
@@ -187,6 +197,7 @@ struct CSS {
 class Message {
     var fileName: String
     var who: String?
+    var threadID: String
     var rowid: Int
     var date: Date
     var guid: String
@@ -201,6 +212,7 @@ class Message {
     init() {
         self.fileName = ""
         self.who = ""
+        self.threadID = ""
         self.rowid = -1
         self.date = Date()
         self.guid = ""
@@ -213,11 +225,12 @@ class Message {
         self.attachments = []
     }
 
-    init(fileName: String, who: String?, rowid: Int, date: Date, guid: String, isFirst: Bool,
-         isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String,
+    init(fileName: String, who: String?, threadID: String, rowid: Int, date: Date, guid: String,
+         isFirst: Bool, isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String,
          attachments: [URL]) {
         self.fileName = fileName
         self.who = who
+        self.threadID = threadID
         self.rowid = rowid
         self.date = date
         self.guid = guid
@@ -497,19 +510,20 @@ class HTML {
                                \(msg.date) - from \(who), \(msg.svc)
                                #\(msg.rowid)
                                """)
-                } else {
-                    append(tag: "p", attributes: ["class": "n"], content: who)
                 }
             }
             if who != prevWho || day != prevDay {
                 html.append(
                     "<div style=\"display: flex; flex-direction: column; align-items: center\">\n")
                 if msg.isFirst {
-                    html.append("<p class=\"n\">\(msg.svc) with \(who)</p>")
+                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID)</p>")
                 }
-                html.append("<p class=\"n\">\(dateStr)</p>"
+                html.append("<p class=\"top\">\(dateStr)</p>"
                     + "</div>\n"
                 )
+            }
+            if !msg.isFromMe {
+                append(tag: "p", attributes: ["class": "n"], content: who)
             }
             prevWho = who
             prevDay = day
@@ -625,7 +639,7 @@ func msg2html(htmlDir: String) {
 
     let archivePath = htmlDir + "/Archive"
     let archiveAttachments = "Attachments"
-    let year = 2016
+    let year = 2017
 
     convertMessages(from: archivePath, htmlDir: htmlDir, attachments: archiveAttachments,
                     forYear: year, toHtmlFile: "testOut\(year)")
