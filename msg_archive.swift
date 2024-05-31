@@ -444,20 +444,21 @@ class MessageSource_Archive {
 
             // Filter for subdirectories that start with the specified year
             let yr = "\(year)"
-            let yearSubdirectories = subdirectories.filter { $0.hasDirectoryPath &&
+            var yearSubdirs = subdirectories.filter { $0.hasDirectoryPath &&
                 $0.lastPathComponent.hasPrefix(yr) }
+            yearSubdirs = yearSubdirs.sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-            for subdirectory in yearSubdirectories {
+            for subdirectory in yearSubdirs {
                 // Get the contents of the subdirectory
-                let ichatFiles = try fileManager.contentsOfDirectory(
+                var ichatFiles = try fileManager.contentsOfDirectory(
                     at: subdirectory, includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
 
-                // Filter for .ichat files
-                let ichatFilesToProcess = ichatFiles.filter { $0.pathExtension == "ichat" }
+                // Filter for and sort .ichat files
+                ichatFiles = ichatFiles.filter { $0.pathExtension == "ichat" }
+                ichatFiles = ichatFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-                for ichatFile in ichatFilesToProcess {
-                    // Process the .ichat file
+                for ichatFile in ichatFiles {
                     try gatherMessagesFrom(ichatFile: ichatFile, attachmentsURL: attachmentsURL)
                 }
             }
