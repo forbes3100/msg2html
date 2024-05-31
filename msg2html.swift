@@ -38,6 +38,19 @@ extension String {
 
         return result
     }
+
+    // Encode non-ASCII characters as XML character references
+    func xmlCharRefReplace() -> String {
+        var encodedString = ""
+        for scalar in self.unicodeScalars {
+            if scalar.isASCII {
+                encodedString.append(Character(scalar))
+            } else {
+                encodedString.append("&#\(scalar.value);")
+            }
+        }
+        return encodedString
+    }
 }
 
 // Common HTML head and foot, including CSS
@@ -129,6 +142,9 @@ p    {
     margin-top: 2px;
     margin-bottom: 2px;
 }
+.spaced-hr {
+    margin-top: 60px;
+}
 </style>
 </head>
 <body>
@@ -174,6 +190,7 @@ class Message {
     var rowid: Int
     var date: Date
     var guid: String
+    var isFirst: Bool
     var isFromMe: Bool
     var hasAttach: Bool
     var handleID: Int
@@ -187,6 +204,7 @@ class Message {
         self.rowid = -1
         self.date = Date()
         self.guid = ""
+        self.isFirst = false
         self.isFromMe = false
         self.hasAttach = false
         self.handleID = -1
@@ -195,13 +213,15 @@ class Message {
         self.attachments = []
     }
 
-    init(fileName: String, who: String?, rowid: Int, date: Date, guid: String, isFromMe: Bool,
-         hasAttach: Bool, handleID: Int, text: String?, svc: String, attachments: [URL]) {
+    init(fileName: String, who: String?, rowid: Int, date: Date, guid: String, isFirst: Bool,
+         isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String,
+         attachments: [URL]) {
         self.fileName = fileName
         self.who = who
         self.rowid = rowid
         self.date = date
         self.guid = guid
+        self.isFirst = isFirst
         self.isFromMe = isFromMe
         self.hasAttach = hasAttach
         self.handleID = handleID
@@ -303,7 +323,8 @@ class HTML {
             }
             
             if !text.isEmpty {
-                let text = text.htmlEscaped().replacingOccurrences(of: "\n", with: "<br>")
+                let text = text.htmlEscaped().xmlCharRefReplace()
+                        .replacingOccurrences(of: "\n", with: "<br>")
                 
                 html.append(
                     "<div\(css.con_class)><div\(css.flex_class)>\n"
@@ -439,6 +460,7 @@ class HTML {
         var prevWho: String? = nil
 
         print("============== writing HTML ===============")
+        var isFirstMessageinHtmlFile = true
         for msg in messages {
 
             let dateFormatter = DateFormatter()
@@ -452,12 +474,16 @@ class HTML {
             }
 
             let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
-            if day != prevDay {
-                append(tag: "hr")
+            if (day != prevDay || msg.isFirst) && !isFirstMessageinHtmlFile  {
+                if msg.isFirst {
+                    html.append("<hr class=\"spaced-hr\">\n")
+                } else {
+                    html.append("<hr>\n")
+                }
             }
 
             css = CSS(isFromMe: msg.isFromMe, svc: msg.svc)
-            let who = msg.who
+            let who = msg.who ?? "Unknown"
             if msg.isFromMe {
                 if debug > 0 {
                     append(tag: "p", attributes: ["class": "d"], content: """
@@ -468,21 +494,26 @@ class HTML {
             } else {
                 if debug > 0 {
                     append(tag: "p", attributes: ["class": "d"], content: """
-                               \(msg.date) - from \(who ?? "Unknown"), \(msg.svc)
+                               \(msg.date) - from \(who), \(msg.svc)
                                #\(msg.rowid)
                                """)
+                } else {
+                    append(tag: "p", attributes: ["class": "n"], content: who)
                 }
             }
             if who != prevWho || day != prevDay {
                 html.append(
-                    "<div style=\"display: flex; flex-direction: column; align-items: center\">\n"
-                    + "<p class=\"n\">\(msg.svc) with \(who ?? "Unknown")</p>"
-                    + "<p class=\"n\">\(dateStr)</p>"
+                    "<div style=\"display: flex; flex-direction: column; align-items: center\">\n")
+                if msg.isFirst {
+                    html.append("<p class=\"n\">\(msg.svc) with \(who)</p>")
+                }
+                html.append("<p class=\"n\">\(dateStr)</p>"
                     + "</div>\n"
                 )
             }
             prevWho = who
             prevDay = day
+            isFirstMessageinHtmlFile = false
 
             // Possible cases:
             //   text

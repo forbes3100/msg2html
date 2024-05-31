@@ -95,6 +95,7 @@ class MessageSource_ChatDB {
                 handles[rowid] = idNamedHandles[id, default: id]
             }
 
+            var isFirst = true
             let messageQuery = """
             SELECT rowid, datetime(substr(date, 1, 9) + 978307200, 'unixepoch',
             'localtime') AS f_date, guid, is_from_me, cache_has_attachments,
@@ -130,6 +131,7 @@ class MessageSource_ChatDB {
                         rowid: rowid,
                         date: date,
                         guid: guid,
+                        isFirst: isFirst,
                         isFromMe: isFromMe,
                         hasAttach: hasAttach,
                         handleID: handleId,
@@ -147,6 +149,7 @@ class MessageSource_ChatDB {
                         msg.isFromMe = true
                     }
                     messages.append(msg)
+                    isFirst = false
                 }
             }
         }

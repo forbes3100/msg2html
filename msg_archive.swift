@@ -302,6 +302,7 @@ class MessageSource_Archive {
         }
 
         // Iterate over InstantMessages
+        var isFirst = true
         var presentities: [Int: Presentity] = [:]
         for (index, imRef) in ims.enumerated() {
             guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
@@ -324,6 +325,8 @@ class MessageSource_Archive {
             let sender = presentities[senderUID]!
             message.who = sender.name
             message.svc = service
+            message.isFirst = isFirst
+            isFirst = false
             message.isFromMe = sender.isMe
             message.rowid = index
             print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
