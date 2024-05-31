@@ -257,8 +257,17 @@ class MessageSource_Archive {
 
         // Assign names to IDs
         for (participantRef, presentityIDRef) in zip(participantsArray, presentityIDsArray) {
-            guard let participant = resolveUID(participantRef, from: objects) as? String else {
-                fatalError("Failed to cast Participant.")
+            guard let participantNameObject = resolveUID(participantRef, from: objects) else {
+                fatalError("Failed to cast Participant name object.")
+            }
+            var participantName = ""
+            if let participant = participantNameObject as? String {
+                participantName = participant
+            } else if let participantDict = participantNameObject as? [String: Any],
+                      let participant = participantDict["NS.string"] as? String {
+                participantName = participant
+            } else {
+                fatalError("Failed to cast Participant name.")
             }
             guard let presentityIDObject = resolveUID(presentityIDRef, from: objects) else {
                 fatalError("Failed to cast PresentityID object.")
@@ -272,7 +281,7 @@ class MessageSource_Archive {
             } else {
                 fatalError("Failed to cast PresentityID.")
             }
-            participantNamesByID[presentityID] = participant
+            participantNamesByID[presentityID] = participantName
             // First presentity is owner's
             if myID == nil {
                 myID = presentityID
