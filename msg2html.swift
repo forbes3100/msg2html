@@ -29,7 +29,7 @@ extension String {
             ">": "&gt;",
             "&": "&amp;",
             "\"": "&quot;",
-            "'": "&#39;",
+            //"'": "&#39;",
         ]
 
         for (key, value) in escapeMapping {
@@ -63,16 +63,16 @@ let htmlHead = """
 <head>
 <style>
 .d   {
-    background-color: #ffffff;
-    color: #505050;
+    background-color: white;
+    color: dimgray;
     font-size: 70%;
     margin-top: 3px;
     margin-bottom: 0px;
     text-align: center;
 }
 .i   {
-    background-color: #ffffff;
-    color: #505050;
+    background-color: white;
+    color: dimgray;
     font-size: 70%;
     font-style: italic;
     margin-top: 0px;
@@ -81,8 +81,8 @@ let htmlHead = """
     margin-right: 10px;
 }
 .j   {
-    background-color: #ffffff;
-    color: #505050;
+    background-color: white;
+    color: dimgray;
     font-size: 70%;
     font-style: italic;
     margin-top: 0px;
@@ -97,23 +97,23 @@ let htmlHead = """
 .cm  {
     display: flex;
     justify-content: flex-end;
-    align-items: center; /* Align items vertically if needed */
+    align-items: center;
     margin-top: 1px;
     margin-left: 250px;
     margin-right: 10px;
     text-align: right;
 }
 .me  {
-    background-color: #1b86fd;
-    color: #ffffff;
+    background-color: #4c86f8; /* blue */
+    color: white;
     font-size: 80%;
     font-family: verdana;
     width: fit-content;
     margin-left: auto;
 }
 .g   {
-    background-color: #2dbf4f;
-    color: #ffffff;
+    background-color: #5bc545; /* green */
+    color: white;
     font-size: 80%;
     font-family: verdana;
     width: fit-content;
@@ -122,8 +122,8 @@ let htmlHead = """
     margin-left: auto;
 }
 .n   {
-    background-color: #ffffff;
-    color: #808080;
+    background-color: white;
+    color: gray;
     font-size: 70%;
     margin-top: 5px;
     margin-bottom: 0px;
@@ -132,8 +132,8 @@ let htmlHead = """
     margin-left: 0px;
 }
 .top   {
-    background-color: #ffffff;
-    color: #202020;
+    background-color: white;
+    color: darkblue;
     font-size: 70%;
     margin-top: 0px;
     margin-bottom: 0px;
@@ -142,22 +142,28 @@ let htmlHead = """
     margin-left: 0px;
 }
 p    {
-    background-color: #e6e6e6;
+    background-color: #e5e5ea; /* very light gray */
     border-radius: 15px;
     font-size: 80%;
-    color: #000000;
+    color: black;
     font-family: verdana;
     padding: 4px;
     width: fit-content;
     margin-top: 2px;
     margin-bottom: 2px;
 }
-.spaced-hr {
+.hr_thread {
     margin-top: 60px;
 }
+.hr_day {
+    border: none;
+    height: 1px;
+    background-color: lightgray;
+    margin: 20px 0;
+}
 .nofile {
-    background-color: #ffffff;
-    border: 2px solid #808080;
+    background-color: white;
+    border: 2px solid gray;
 }
 </style>
 </head>
@@ -486,16 +492,16 @@ class HTML {
 
             print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
             let calendar = Calendar.current
-            if calendar.component(.year, from: msg.date) != year {
-                continue
-            }
+//            if calendar.component(.year, from: msg.date) != year {
+//                continue
+//            }
 
             let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
             if (day != prevDay || msg.isFirst) && !isFirstMessageinHtmlFile  {
                 if msg.isFirst {
-                    html.append("<hr class=\"spaced-hr\">\n")
+                    html.append("<hr class=\"hr_thread\">\n")
                 } else {
-                    html.append("<hr>\n")
+                    html.append("<hr class=\"hr_day\">\n")
                 }
             }
 
@@ -520,7 +526,7 @@ class HTML {
                 html.append(
                     "<div style=\"display: flex; flex-direction: column; align-items: center\">\n")
                 if msg.isFirst {
-                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID)</p>")
+                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID) (\(who))</p>")
                 }
                 html.append("<p class=\"top\">\(dateStr)</p>"
                     + "</div>\n"
