@@ -20,6 +20,7 @@ let debug = 0
 var haveLinks: Bool = false
 var attDirUrl: URL?
 var extAttFiles: [String: URL]?
+let replaceObjToken = "\u{fffc}"
 
 extension String {
     func htmlEscaped() -> String {
@@ -417,9 +418,13 @@ class HTML {
                     }
                 }
 
+                guard let aPathEncoded = aPath.addingPercentEncoding(
+                    withAllowedCharacters: .urlPathAllowed) else {
+                    fatalError("Can't encode filename \"\(aPath)\"")
+                }
                 html.append(
                     "<div\(css.con_class)><div\(css.flex_class)>\n"
-                    + "<img\(css.img_class) src=\"\(aPath)\" width=\"\(aWidth)\">\n"
+                    + "<img\(css.img_class) src=\"\(aPathEncoded)\" width=\"\(aWidth)\">\n"
                     + "</div></div>\n"
                 )
 
@@ -544,7 +549,6 @@ class HTML {
             //   attachment
             //   text 0, attachment 0, [text 1, attachment 1, ...] text n
             if let text = msg.text {
-                let replaceObjToken = "\u{fffc}"
                 var i = text.startIndex
                 var seq = 0
                 

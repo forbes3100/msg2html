@@ -424,7 +424,8 @@ class MessageSource_Archive {
                 }
                 text = orignalText
             }
-            print("Message[\(index)] = '\(text)'")
+            let textWithAtt = text.replacingOccurrences(of: replaceObjToken, with: "<att>")
+            print("Message[\(index)] = \"\(textWithAtt)\"")
             message.text = text
             message.attachments = attachments
             messages.append(message)
