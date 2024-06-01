@@ -256,6 +256,7 @@ class MessageSource_Archive {
         }
 
         // Assign names to IDs
+        participantNamesByID = [:]
         for (participantRef, presentityIDRef) in zip(participantsArray, presentityIDsArray) {
             guard let participantNameObject = resolveUID(participantRef, from: objects) else {
                 fatalError("Failed to cast Participant name object.")
@@ -330,15 +331,42 @@ class MessageSource_Archive {
                   let senderUID = extractValue(from: "\(senderRef)") else {
                 fatalError("Failed to cast InstantMessage.Sender.")
             }
-            print("Message[\(index)].Sender UID = \(senderUID)")
+            print("\nMessage[\(index)].Sender UID = \(senderUID)")
             if !presentities.keys.contains(senderUID) {
                 presentities[senderUID] = Presentity(uid: senderUID, from: objects, parent: self)
             }
-            message.fileName = fileURL.path
             let sender = presentities[senderUID]!
-            message.who = sender.name
+            var myName = sender.name
+            if let subjectRef = im["Subject"] {
+                guard let subjectUID = extractValue(from: "\(subjectRef)") else {
+                    fatalError("Failed to cast InstantMessage.Subject.")
+                }
+                print("Message[\(index)].Subject UID = \(subjectUID)")
+                if !presentities.keys.contains(subjectUID) {
+                    presentities[subjectUID] = Presentity(uid: subjectUID, from: objects, parent: self)
+                }
+                let subject = presentities[subjectUID]!
+                if sender.id.starts(with: "e:") {
+                    print("  Setting who to subject \(subject.name), \(subject.id)")
+                    message.who = subject.name
+                    message.threadID = subject.id
+                }
+                if !sender.isMe {
+                    myName = subject.name
+                }
+            }
+            if message.who == "" {
+                message.who = sender.name
+                message.threadID = sender.id
+            }
+
+            let participants = participantNamesByID.values.filter { $0 != myName }
+            message.party = participants.joined(separator: ", ")
+            print("Message[\(index)].party = \"\(message.party)\"")
+            print("   (sender.name = \"\(sender.name)\")")
+
+            message.fileName = fileURL.path
             message.svc = service
-            message.threadID = sender.id
             message.isFirst = isFirst
             isFirst = false
             message.isFromMe = sender.isMe

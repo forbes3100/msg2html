@@ -218,6 +218,7 @@ class Message {
     var handleID: Int
     var text: String?
     var svc: String
+    var party: String
     var attachments: [(String, URL?)]
 
     init() {
@@ -233,11 +234,12 @@ class Message {
         self.handleID = -1
         self.text = nil
         self.svc = ""
+        self.party = ""
         self.attachments = []
     }
 
     init(fileName: String, who: String?, threadID: String, rowid: Int, date: Date, guid: String,
-         isFirst: Bool, isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String,
+         isFirst: Bool, isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String, party: String,
          attachments: [(String, URL?)]) {
         self.fileName = fileName
         self.who = who
@@ -251,6 +253,7 @@ class Message {
         self.handleID = handleID
         self.text = text
         self.svc = svc
+        self.party = party
         self.attachments = attachments
     }
 }
@@ -531,7 +534,7 @@ class HTML {
                 html.append(
                     "<div style=\"display: flex; flex-direction: column; align-items: center\">\n")
                 if msg.isFirst {
-                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID) (\(who))</p>")
+                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID) (\(msg.party))</p>")
                 }
                 html.append("<p class=\"top\">\(dateStr)</p>"
                     + "</div>\n"
