@@ -39,7 +39,7 @@ final class Msg2HtmlTests: XCTestCase {
         let attDir = "TestAttachments"
         let extAttDir: String? = nil
 
-        convertMessages(from: archiveDir, htmlDir: htmlDir, attachments: attDir, externalAttachmentLibrary: extAttDir, forYear: year, toHtmlFile: htmlName)
+        convertMessages(from: archiveDir, htmlDir: htmlDir, attachments: attDir, externalAttachmentLibrary: extAttDir, year: year, toHtmlFile: htmlName)
         let htmlFileURL = URL(fileURLWithPath: htmlFile)
         XCTAssertTrue(FileManager.default.fileExists(atPath: htmlFileURL.path))
 

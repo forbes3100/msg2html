@@ -29,7 +29,7 @@ extension String {
             "<": "&lt;",
             ">": "&gt;",
             "&": "&amp;",
-            "\"": "&quot;",
+            //"\"": "&quot;",
             //"'": "&#39;",
         ]
 
@@ -111,6 +111,7 @@ let htmlHead = """
     font-family: verdana;
     width: fit-content;
     margin-left: auto;
+    text-align: left;
 }
 .g   {
     background-color: #5bc545; /* green */
@@ -121,6 +122,7 @@ let htmlHead = """
     margin-top: 1px;
     margin-bottom: 0px;
     margin-left: auto;
+    text-align: left;
 }
 .n   {
     background-color: white;
@@ -486,14 +488,22 @@ class HTML {
             let msgSrc = MessageSource_Archive()
             messages = msgSrc.getMessages(inArchive: source, attachmentsURL: attachmentsURL, forYear: year)
         }
+        
+        // Sort messages by date/time
+        messages = messages.sorted { $0.date < $1.date }
 
         var prevDay = 0
         var prevWho: String? = nil
+        var prevMessage: Message? = nil
 
         print("============== writing HTML ===============")
         var isFirstMessageinHtmlFile = true
         for msg in messages {
 
+            if let p = prevMessage,
+               p.date == msg.date && p.text == msg.text && p.who == msg.who {
+                continue
+            }
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "M/d/yy, h:mm a"
             let dateStr = dateFormatter.string(from: msg.date)
@@ -504,9 +514,10 @@ class HTML {
 //                continue
 //            }
 
-            let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
-            if (day != prevDay || msg.isFirst) && !isFirstMessageinHtmlFile  {
-                if msg.isFirst {
+           let isNewThread = msg.isFirst || msg.party != prevMessage?.party
+           let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
+            if (day != prevDay || isNewThread) && !isFirstMessageinHtmlFile  {
+                if isNewThread {
                     html.append("<hr class=\"hr_thread\">\n")
                 } else {
                     html.append("<hr class=\"hr_day\">\n")
@@ -533,18 +544,20 @@ class HTML {
             if who != prevWho || day != prevDay {
                 html.append(
                     "<div style=\"display: flex; flex-direction: column; align-items: center\">\n")
-                if msg.isFirst {
-                    html.append("<p class=\"top\">\(msg.svc) with \(msg.threadID) (\(msg.party))</p>")
+                if isNewThread {
+                    let threadID = msg.threadID.htmlEscaped().xmlCharRefReplace()
+                    let party = msg.party.htmlEscaped().xmlCharRefReplace()
+                    html.append("<p class=\"top\">\(msg.svc) with \(threadID) (\(party))</p>")
                 }
-                html.append("<p class=\"top\">\(dateStr)</p>"
-                    + "</div>\n"
-                )
+                html.append("<p class=\"top\">\(dateStr)</p></div>\n")
             }
             if !msg.isFromMe {
-                append(tag: "p", attributes: ["class": "n"], content: who)
+                let whoEncoded = who.htmlEscaped().xmlCharRefReplace()
+                append(tag: "p", attributes: ["class": "n"], content: whoEncoded)
             }
             prevWho = who
             prevDay = day
+            prevMessage = msg
             isFirstMessageinHtmlFile = false
 
             // Possible cases:
@@ -610,17 +623,20 @@ class HTML {
 ///   - toHtmlFile: Output file base name.
 func convertMessages(from source: String, htmlDir: String, attachments: String,
                      externalAttachmentLibrary: String? = nil,
-                     forYear year: Int, toHtmlFile: String) {
+                     year: Int, toYear: Int? = nil, toHtmlFile: String) {
     
     // if external attachments directory path given, make a list of files there
     // ** TODO **
     
     // convert all messages in database
-    let html = HTML()
     //let year = Calendar.current.component(.year, from: Date())
     let htmlDirURL = URL(fileURLWithPath: htmlDir)
-    html.appendMessages(source: source, htmlDirURL: htmlDirURL, attachments: attachments, year: year)
-    html.write(file: htmlDirURL.appendingPathComponent(toHtmlFile + ".html").path)
+    let endYear = toYear ?? year
+    for y in year...endYear {
+        let html = HTML()
+        html.appendMessages(source: source, htmlDirURL: htmlDirURL, attachments: attachments, year: y)
+        html.write(file: htmlDirURL.appendingPathComponent(toHtmlFile + "\(y).html").path)
+    }
 }
 
 func msg2html(htmlDir: String) {
@@ -656,8 +672,9 @@ func msg2html(htmlDir: String) {
 
     let archivePath = htmlDir + "/Archive"
     let archiveAttachments = "Attachments"
-    let year = 2017
+    let year = 2022
+    let endYear = 2022
 
     convertMessages(from: archivePath, htmlDir: htmlDir, attachments: archiveAttachments,
-                    forYear: year, toHtmlFile: "testOut\(year)")
+                    year: year, toYear: endYear, toHtmlFile: "testOut")
 }

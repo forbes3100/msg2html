@@ -204,12 +204,12 @@ class MessageSource_Archive {
     }
 
     // Unarchive a .ichat file and add to messages array
-    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
+    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL, year: Int?) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
-        print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
+        //print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
         self.attachmentsURL = attachmentsURL
-        print("attachmentURL=\(attachmentsURL.lastPathComponent))")
+        //print("attachmentURL=\(attachmentsURL.lastPathComponent))")
 
         // Deserialize the plist
         var format = PropertyListSerialization.PropertyListFormat.xml
@@ -318,6 +318,7 @@ class MessageSource_Archive {
         // Iterate over InstantMessages
         var isFirst = true
         var presentities: [Int: Presentity] = [:]
+        let calendar = Calendar.current
         for (index, imRef) in ims.enumerated() {
             guard let im = resolveUID(imRef, from: objects) as? [String:Any] else {
                 fatalError("Failed to cast InstantMessage \(index).")
@@ -325,8 +326,21 @@ class MessageSource_Archive {
 
             // Handle InstantMessage elements
             //print("InstantMessage[\(index)] = \(im)")
-            // Insure that the message sender's Presentity record is in presentities dict
+            // Get message date and time, optionally skipping message if not in given year
+            guard let dateRef = im["Time"],
+                  let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
+                  let timeInterval = dateDict["NS.time"] as? TimeInterval else {
+                fatalError("Failed to cast InstantMessage.Date.")
+            }
+            let date = convertNSTimeIntervalToDate(timeInterval)
+            if year != nil && calendar.component(.year, from: date) != year {
+                continue
+            }
+            print("Message[\(index)].Date = \(formatDate(date))")
             let message = Message()
+            message.date = date
+
+            // Insure that the message sender's Presentity record is in presentities dict
             guard let senderRef = im["Sender"],
                   let senderUID = extractValue(from: "\(senderRef)") else {
                 fatalError("Failed to cast InstantMessage.Sender.")
@@ -374,16 +388,6 @@ class MessageSource_Archive {
             print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
             print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
 
-            // Get message date and time
-            guard let dateRef = im["Time"],
-                  let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
-                  let timeInterval = dateDict["NS.time"] as? TimeInterval else {
-                fatalError("Failed to cast InstantMessage.Date.")
-            }
-            let date = convertNSTimeIntervalToDate(timeInterval)
-            print("Message[\(index)].Date = \(formatDate(date))")
-            message.date = date
-
             // Get message Globally Unique Identifier
             guard let guidRef = im["GUID"],
                   let guid = resolveUID(guidRef, from: objects) as? String else {
@@ -397,45 +401,48 @@ class MessageSource_Archive {
             var attachments: [(String, URL?)] = []
             if let textRef = im["MessageText"] {
                 // parse text's NSMutableAttributedString
-                guard let textDict = resolveUID(textRef, from: objects) as? [String: Any],
-                      // parse attributes first
-                      let nsAttributesRef = textDict["NSAttributes"],
-                      let nsAttributes = resolveUID(nsAttributesRef,
-                                                        from: objects) as? [String: Any] else {
+                guard let textDict = resolveUID(textRef, from: objects) as? [String: Any] else {
                     fatalError("Failed to cast InstantMessage.MessageText.")
                 }
-
-                guard let nsAttributesClassRef = nsAttributes["$class"],
-                      let nsAttributesClass = resolveUID(nsAttributesClassRef,
-                                                         from: objects) as? [String: Any?],
-                      let nsAttributesClassName = nsAttributesClass["$classname"] as? String else {
-                    fatalError("Failed to get InstantMessage.MessageText.NSAttributes.$class")
-                }
-
-                // if MessageText.NSAttributes is an array, it contains attachments
-                if nsAttributesClassName == "NSMutableArray" {
-                    guard let nsAttributesArray = nsAttributes["NS.objects"] as? [Any] else {
-                        fatalError("Failed to get InstantMessage.MessageText.NSAttributes objects")
+                      // parse attributes first
+                if let nsAttributesRef = textDict["NSAttributes"] {
+                    guard let nsAttributes = resolveUID(nsAttributesRef,
+                                                        from: objects) as? [String: Any] else {
+                        fatalError("Failed to cast InstantMessage.MessageText.")
                     }
-                    for (index, attachmentRef) in nsAttributesArray.enumerated() {
-                        print("Attachment \(index): \(attachmentRef)")
-                        guard let styleAttachment = resolveUID(attachmentRef,
-                                                          from: objects) as? [String:Any] else {
-                            fatalError("Failed to get attachment \(index)")
+
+                    guard let nsAttributesClassRef = nsAttributes["$class"],
+                          let nsAttributesClass = resolveUID(nsAttributesClassRef,
+                                                             from: objects) as? [String: Any?],
+                          let nsAttributesClassName = nsAttributesClass["$classname"] as? String else {
+                        fatalError("Failed to get InstantMessage.MessageText.NSAttributes.$class")
+                    }
+
+                    // if MessageText.NSAttributes is an array, it contains attachments
+                    if nsAttributesClassName == "NSMutableArray" {
+                        guard let nsAttributesArray = nsAttributes["NS.objects"] as? [Any] else {
+                            fatalError("Failed to get InstantMessage.MessageText.NSAttributes objects")
                         }
-                        // ignore style-only element, but get styled attachment
-                        let (fileName, attachment) = parse(styleAttachment: styleAttachment,
-                                                           from: objects, parent: self)
+                        for (index, attachmentRef) in nsAttributesArray.enumerated() {
+                            print("Attachment \(index): \(attachmentRef)")
+                            guard let styleAttachment = resolveUID(attachmentRef,
+                                                              from: objects) as? [String:Any] else {
+                                fatalError("Failed to get attachment \(index)")
+                            }
+                            // ignore style-only element, but get styled attachment
+                            let (fileName, attachment) = parse(styleAttachment: styleAttachment,
+                                                               from: objects, parent: self)
+                            if let fileName = fileName {
+                                attachments.append((fileName, attachment))
+                            }
+                        }
+                    } else if nsAttributesClassName == "NSDictionary" {
+                        // if MessageText.NSAttributes is a dictionary, it's a single style+attachment
+                        let (fileName, attachment) = parse(styleAttachment: nsAttributes,
+                                                              from: objects, parent: self)
                         if let fileName = fileName {
                             attachments.append((fileName, attachment))
                         }
-                    }
-                } else if nsAttributesClassName == "NSDictionary" {
-                    // if MessageText.NSAttributes is a dictionary, it's a single style+attachment
-                    let (fileName, attachment) = parse(styleAttachment: nsAttributes,
-                                                          from: objects, parent: self)
-                    if let fileName = fileName {
-                        attachments.append((fileName, attachment))
                     }
                 }
 
@@ -464,20 +471,22 @@ class MessageSource_Archive {
                      forYear year: Int) -> [Message] {
         messages = []
         let directoryURL = URL(fileURLWithPath: directoryPath)
+        let filterMessagesByYear = true
 
         do {
             // Get the contents of the directory
-            let subdirectories = try fileManager.contentsOfDirectory(
+            var subdirs = try fileManager.contentsOfDirectory(
                 at: directoryURL, includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
 
-            // Filter for subdirectories that start with the specified year
-            let yr = "\(year)"
-            var yearSubdirs = subdirectories.filter { $0.hasDirectoryPath &&
-                $0.lastPathComponent.hasPrefix(yr) }
-            yearSubdirs = yearSubdirs.sorted { $0.lastPathComponent < $1.lastPathComponent }
-
-            for subdirectory in yearSubdirs {
+            // Optionally filter for subdirectories that start with the specified year
+            let yrStr = "\(year)"
+            if !filterMessagesByYear {
+                subdirs = subdirs.filter { $0.hasDirectoryPath &&
+                    $0.lastPathComponent.hasPrefix(yrStr) }
+            }
+            subdirs = subdirs.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            for subdirectory in subdirs {
                 // Get the contents of the subdirectory
                 var ichatFiles = try fileManager.contentsOfDirectory(
                     at: subdirectory, includingPropertiesForKeys: nil,
@@ -487,8 +496,13 @@ class MessageSource_Archive {
                 ichatFiles = ichatFiles.filter { $0.pathExtension == "ichat" }
                 ichatFiles = ichatFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
 
+                var messagesYear: Int? = nil
+                if filterMessagesByYear {
+                    messagesYear = year
+                }
                 for ichatFile in ichatFiles {
-                    try gatherMessagesFrom(ichatFile: ichatFile, attachmentsURL: attachmentsURL)
+                    try gatherMessagesFrom(ichatFile: ichatFile, attachmentsURL: attachmentsURL,
+                                           year: messagesYear)
                 }
             }
         } catch let FileError.xmlParsingError(message) {
