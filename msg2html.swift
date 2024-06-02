@@ -207,7 +207,7 @@ struct CSS {
     }
 }
 
-class Message {
+struct Message {
     var fileName: String
     var who: String?
     var threadID: String
@@ -216,48 +216,10 @@ class Message {
     var guid: String
     var isFirst: Bool
     var isFromMe: Bool
-    var hasAttach: Bool
-    var handleID: Int
     var text: String?
     var svc: String
     var party: String
     var attachments: [(String, URL?)]
-
-    init() {
-        self.fileName = ""
-        self.who = ""
-        self.threadID = ""
-        self.rowid = -1
-        self.date = Date()
-        self.guid = ""
-        self.isFirst = false
-        self.isFromMe = false
-        self.hasAttach = false
-        self.handleID = -1
-        self.text = nil
-        self.svc = ""
-        self.party = ""
-        self.attachments = []
-    }
-
-    init(fileName: String, who: String?, threadID: String, rowid: Int, date: Date, guid: String,
-         isFirst: Bool, isFromMe: Bool, hasAttach: Bool, handleID: Int, text: String?, svc: String, party: String,
-         attachments: [(String, URL?)]) {
-        self.fileName = fileName
-        self.who = who
-        self.threadID = threadID
-        self.rowid = rowid
-        self.date = date
-        self.guid = guid
-        self.isFirst = isFirst
-        self.isFromMe = isFromMe
-        self.hasAttach = hasAttach
-        self.handleID = handleID
-        self.text = text
-        self.svc = svc
-        self.party = party
-        self.attachments = attachments
-    }
 }
 
 class HTML {

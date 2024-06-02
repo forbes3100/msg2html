@@ -337,8 +337,6 @@ class MessageSource_Archive {
                 continue
             }
             print("Message[\(index)].Date = \(formatDate(date))")
-            let message = Message()
-            message.date = date
 
             // Insure that the message sender's Presentity record is in presentities dict
             guard let senderRef = im["Sender"],
@@ -351,6 +349,8 @@ class MessageSource_Archive {
             }
             let sender = presentities[senderUID]!
             var myName = sender.name
+            var who: String = ""
+            var threadID: String = ""
             if let subjectRef = im["Subject"] {
                 guard let subjectUID = extractValue(from: "\(subjectRef)") else {
                     fatalError("Failed to cast InstantMessage.Subject.")
@@ -362,31 +362,22 @@ class MessageSource_Archive {
                 let subject = presentities[subjectUID]!
                 if sender.id.starts(with: "e:") {
                     print("  Setting who to subject \(subject.name), \(subject.id)")
-                    message.who = subject.name
-                    message.threadID = subject.id
+                    who = subject.name
+                    threadID = subject.id
                 }
                 if !sender.isMe {
                     myName = subject.name
                 }
             }
-            if message.who == "" {
-                message.who = sender.name
-                message.threadID = sender.id
+            if who == "" {
+                who = sender.name
+                threadID = sender.id
             }
 
             let participants = participantNamesByID.values.filter { $0 != myName }
-            message.party = participants.joined(separator: ", ")
-            print("Message[\(index)].party = \"\(message.party)\"")
+            let party = participants.joined(separator: ", ")
+            print("Message[\(index)].party = \"\(party)\"")
             print("   (sender.name = \"\(sender.name)\")")
-
-            message.fileName = fileURL.path
-            message.svc = service
-            message.isFirst = isFirst
-            isFirst = false
-            message.isFromMe = sender.isMe
-            message.rowid = index
-            print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
-            print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
 
             // Get message Globally Unique Identifier
             guard let guidRef = im["GUID"],
@@ -394,7 +385,6 @@ class MessageSource_Archive {
                 fatalError("Failed to cast InstantMessage.GUID.")
             }
             print("Message[\(index)].GUID = \(guid)")
-            message.guid = guid
 
             // Get message attributes (including attachments) and text
             var text = ""
@@ -461,9 +451,25 @@ class MessageSource_Archive {
             }
             let textWithAtt = text.replacingOccurrences(of: replaceObjToken, with: "<att>")
             print("Message[\(index)] = \"\(textWithAtt)\"")
-            message.text = text
-            message.attachments = attachments
+
+            let message = Message(fileName: fileURL.path,
+                                  who: who,
+                                  threadID: threadID,
+                                  rowid: index,
+                                  date: date,
+                                  guid: guid,
+                                  isFirst: isFirst,
+                                  isFromMe: sender.isMe,
+                                  text: text,
+                                  svc: service,
+                                  party: party,
+                                  attachments: attachments)
             messages.append(message)
+
+            print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
+            print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
+
+            isFirst = false
         }
     }
 
