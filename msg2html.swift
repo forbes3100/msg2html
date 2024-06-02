@@ -16,7 +16,9 @@ import Foundation
 import AppKit
 //import UniformTypeIdentifiers
 
+// debug level: 0=none, 1=file, 2=message, 3=character, 4=attachment
 let debug = 0
+
 var haveLinks: Bool = false
 var attDirUrl: URL?
 var extAttFiles: [String: URL]?
@@ -353,9 +355,11 @@ class HTML {
 
     /// Write text to output as HTML, converting emoji.
     func output(text: String) {
-        print("output(text: \"\(text)\")")
+        if debug > 1 {
+            print("output(text: \"\(text)\")")
+        }
         if let css = self.css {
-            if debug > 0 {
+            if debug > 2 {
                 let utext = text.unicodeScalars.map { String(format: " \\u{%X}", $0.value) }.joined()
                 html.append("<p\(css.info_class)>text(\(text.count)) = \(utext)</p>\n")
             }
@@ -382,8 +386,9 @@ class HTML {
         let fileManager = FileManager.default
         let (fileName, url) = msg.attachments[attachmentNo]
         guard let css = css else { return }
-        print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
-
+        if debug > 1 {
+            print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
+        }
         if let url = url, fileManager.fileExists(atPath: url.path) {
             var aPath = url.pathComponents.suffix(5).joined(separator: "/")
             let aWidth = 300
@@ -391,13 +396,13 @@ class HTML {
             let isPP = aSplitExt == "pluginPayloadAttachment"
             var (mimeT, aDate) = getMimeTypeAndDate(for: url)
 
-            if debug > 1 {
+            if debug > 3 {
                 html.append("<p\(css.info_class)>attFileURL=\(aPath)</p>\n")
                 let mimeTStr = String(describing: mimeT)
                 let dateStr = String(describing: aDate)
                 html.append("<p\(css.info_class)>a_path=\(aPath), \(mimeTStr), \(dateStr)</p>\n")
             } else {
-                if debug > 0 {
+                if debug > 2 {
                     html.append("<p\(css.info_class)>\(aPath)</p>\n")
                 }
             }
@@ -425,7 +430,7 @@ class HTML {
                     }
                     aPath = jpegPath
                     mimeT = "image/jpeg"
-                    if debug > 1 {
+                    if debug > 3 {
                         let mimeTStr = String(describing: mimeT)
                         let dateStr = String(describing: aDate)
                         html.append("<p\(css.info_class)>\(aPath), \(mimeTStr), \(dateStr)</p>\n")
@@ -461,7 +466,9 @@ class HTML {
         var prevWho: String? = nil
         var prevMessage: Message? = nil
 
-        print("============== building HTML ===============")
+        if debug > 0 {
+            print("Building HTML")
+        }
         var isFirstMessageinHtmlFile = true
         for msg in messages {
             
@@ -473,7 +480,9 @@ class HTML {
             dateFormatter.dateFormat = "M/d/yy, h:mm a"
             let dateStr = dateFormatter.string(from: msg.date)
             
-            print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
+            if debug > 1 {
+                print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
+            }
             let calendar = Calendar.current
             
             let isNewThread = msg.isFirst || msg.party != prevMessage?.party
@@ -489,14 +498,14 @@ class HTML {
             css = CSS(isFromMe: msg.isFromMe, svc: msg.svc)
             let who = msg.who ?? "Unknown"
             if msg.isFromMe {
-                if debug > 0 {
+                if debug > 2 {
                     append(tag: "p", attributes: ["class": "d"], content: """
                                \(msg.date) - from me, \(msg.svc)
                                #\(msg.rowid)
                                """)
                 }
             } else {
-                if debug > 0 {
+                if debug > 2 {
                     append(tag: "p", attributes: ["class": "d"], content: """
                                \(msg.date) - from \(who), \(msg.svc)
                                #\(msg.rowid)
@@ -559,7 +568,9 @@ class HTML {
             }
 
             // Write the content to the file
-            print("Writing \(fileURL.path)")
+            if debug > 0 {
+                print("Writing \(fileURL.path)")
+            }
             let out = try FileHandle(forWritingTo: fileURL)
             defer { out.closeFile() }
 
@@ -632,15 +643,17 @@ func msg2html(msgsDir: String) {
 */
     let fileManager = FileManager.default
     let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-    print("Current Directory: \(currentDirectoryURL.path)")
+    if debug > 0 {
+        print("Current Directory: \(currentDirectoryURL.path)")
+    }
 //    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
 //    let archiveAttachments = "TestAttachments"
 //    let archiveYear = 2024
 
     let archivePath = msgsDir + "/Archive"
     let archiveAttachments = "Attachments"
-    let year = 2022
-    let endYear = 2022
+    let year = 2012
+    let endYear = 2024
 
     convertMessages(from: archivePath, msgsDir: msgsDir, attachments: archiveAttachments,
                     year: year, toYear: endYear, toHtmlFile: "testOut")

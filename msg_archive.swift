@@ -189,7 +189,7 @@ class MessageSource_Archive {
             // have attached file's path: return URL if file exists
             if let guidDirectory = findGUIDSubdirectory(in: parent.attachmentsURL, guid: fileGUID) {
                 let attachmentURL = guidDirectory.appendingPathComponent(fileName)
-                if debug > 1 {
+                if debug > 3 {
                     let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
                     print("Attachment: \(d)/\(fileName)")
                 }
@@ -237,7 +237,7 @@ class MessageSource_Archive {
               let metadataArray = metadataDict["NS.objects"] as? NSArray else {
             fatalError("Failed to retrieve metadata object.")
         }
-        if debug > 1 {
+        if debug > 3 {
             print("Metadata Object: \(metadataArray)")
         }
 
@@ -300,7 +300,7 @@ class MessageSource_Archive {
               let root = rootDict["NS.objects"] as? NSArray else {
             fatalError("Failed to cast root object to dictionary or extract NS.objects.")
         }
-        if debug > 1 {
+        if debug > 3 {
             print("Root: \(root)")
         }
 
@@ -333,14 +333,18 @@ class MessageSource_Archive {
                 fatalError("Failed to cast InstantMessage.Date.")
             }
             let date = convertNSTimeIntervalToDate(timeInterval)
-            print("Message[\(index)].Date = \(formatDate(date))")
+            if debug > 1 {
+                print("Message[\(index)].Date = \(formatDate(date))")
+            }
 
             // Insure that the message sender's Presentity record is in presentities dict
             guard let senderRef = im["Sender"],
                   let senderUID = extractValue(from: "\(senderRef)") else {
                 fatalError("Failed to cast InstantMessage.Sender.")
             }
-            print("\nMessage[\(index)].Sender UID = \(senderUID)")
+            if debug > 1 {
+                print("\nMessage[\(index)].Sender UID = \(senderUID)")
+            }
             if !presentities.keys.contains(senderUID) {
                 presentities[senderUID] = Presentity(uid: senderUID, from: objects, parent: self)
             }
@@ -352,13 +356,17 @@ class MessageSource_Archive {
                 guard let subjectUID = extractValue(from: "\(subjectRef)") else {
                     fatalError("Failed to cast InstantMessage.Subject.")
                 }
-                print("Message[\(index)].Subject UID = \(subjectUID)")
+                if debug > 1 {
+                    print("Message[\(index)].Subject UID = \(subjectUID)")
+                }
                 if !presentities.keys.contains(subjectUID) {
                     presentities[subjectUID] = Presentity(uid: subjectUID, from: objects, parent: self)
                 }
                 let subject = presentities[subjectUID]!
                 if sender.id.starts(with: "e:") {
-                    print("  Setting who to subject \(subject.name), \(subject.id)")
+                    if debug > 1 {
+                        print("  Setting who to subject \(subject.name), \(subject.id)")
+                    }
                     who = subject.name
                     threadID = subject.id
                 }
@@ -373,15 +381,19 @@ class MessageSource_Archive {
 
             let participants = participantNamesByID.values.filter { $0 != myName }
             let party = participants.joined(separator: ", ")
-            print("Message[\(index)].party = \"\(party)\"")
-            print("   (sender.name = \"\(sender.name)\")")
+            if debug > 1 {
+                print("Message[\(index)].party = \"\(party)\"")
+                print("   (sender.name = \"\(sender.name)\")")
+            }
 
             // Get message Globally Unique Identifier
             guard let guidRef = im["GUID"],
                   let guid = resolveUID(guidRef, from: objects) as? String else {
                 fatalError("Failed to cast InstantMessage.GUID.")
             }
-            print("Message[\(index)].GUID = \(guid)")
+            if debug > 1 {
+                print("Message[\(index)].GUID = \(guid)")
+            }
 
             // Get message attributes (including attachments) and text
             var text = ""
@@ -411,7 +423,9 @@ class MessageSource_Archive {
                             fatalError("Failed to get InstantMessage.MessageText.NSAttributes objects")
                         }
                         for (index, attachmentRef) in nsAttributesArray.enumerated() {
-                            print("Attachment \(index): \(attachmentRef)")
+                            if debug > 1 {
+                                print("Attachment \(index): \(attachmentRef)")
+                            }
                             guard let styleAttachment = resolveUID(attachmentRef,
                                                               from: objects) as? [String:Any] else {
                                 fatalError("Failed to get attachment \(index)")
@@ -447,7 +461,9 @@ class MessageSource_Archive {
                 text = orignalText
             }
             let textWithAtt = text.replacingOccurrences(of: replaceObjToken, with: "<att>")
-            print("Message[\(index)] = \"\(textWithAtt)\"")
+            if debug > 1 {
+                print("Message[\(index)] = \"\(textWithAtt)\"")
+            }
 
             let message = Message(fileName: fileURL.path,
                                   who: who,
@@ -464,9 +480,10 @@ class MessageSource_Archive {
             let year = calendar.component(.year, from: date)
             messagesByYear[year, default: []].append(message)
 
-            print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
-            print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
-
+            if debug > 1 {
+                print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
+                print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
+            }
             isFirst = false
         }
     }
