@@ -75,7 +75,7 @@ class MessageSource_Archive {
     var attachmentsURL: URL!
     var participantNamesByID: [String: String] = [:]
     var myID: String? = nil
-    var messages: [Message] = []
+    var messagesByYear: [Int: [Message]] = [:]
 
     init() {
         self.fileManager = FileManager.default
@@ -204,7 +204,7 @@ class MessageSource_Archive {
     }
 
     // Unarchive a .ichat file and add to messages array
-    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL, year: Int?) throws {
+    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
         //print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
@@ -326,16 +326,13 @@ class MessageSource_Archive {
 
             // Handle InstantMessage elements
             //print("InstantMessage[\(index)] = \(im)")
-            // Get message date and time, optionally skipping message if not in given year
+            // Get message date and time
             guard let dateRef = im["Time"],
                   let dateDict = resolveUID(dateRef, from: objects) as? [String: Any],
                   let timeInterval = dateDict["NS.time"] as? TimeInterval else {
                 fatalError("Failed to cast InstantMessage.Date.")
             }
             let date = convertNSTimeIntervalToDate(timeInterval)
-            if year != nil && calendar.component(.year, from: date) != year {
-                continue
-            }
             print("Message[\(index)].Date = \(formatDate(date))")
 
             // Insure that the message sender's Presentity record is in presentities dict
@@ -464,7 +461,8 @@ class MessageSource_Archive {
                                   svc: service,
                                   party: party,
                                   attachments: attachments)
-            messages.append(message)
+            let year = calendar.component(.year, from: date)
+            messagesByYear[year, default: []].append(message)
 
             print("Message[\(index)].fileName = \(message.fileName), .rowid = \(message.rowid)")
             print("Message[\(index)].who = \(message.who ?? "?"), .isFromMe=\(message.isFromMe)")
@@ -473,11 +471,9 @@ class MessageSource_Archive {
         }
     }
 
-    func getMessages(inArchive directoryPath: String, attachmentsURL: URL,
-                     forYear year: Int) -> [Message] {
-        messages = []
+    func getMessagesByYear(inArchive directoryPath: String,
+                           attachmentsURL: URL) -> [Int: [Message]] {
         let directoryURL = URL(fileURLWithPath: directoryPath)
-        let filterMessagesByYear = true
 
         do {
             // Get the contents of the directory
@@ -485,12 +481,6 @@ class MessageSource_Archive {
                 at: directoryURL, includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
 
-            // Optionally filter for subdirectories that start with the specified year
-            let yrStr = "\(year)"
-            if !filterMessagesByYear {
-                subdirs = subdirs.filter { $0.hasDirectoryPath &&
-                    $0.lastPathComponent.hasPrefix(yrStr) }
-            }
             subdirs = subdirs.sorted { $0.lastPathComponent < $1.lastPathComponent }
             for subdirectory in subdirs {
                 // Get the contents of the subdirectory
@@ -502,13 +492,9 @@ class MessageSource_Archive {
                 ichatFiles = ichatFiles.filter { $0.pathExtension == "ichat" }
                 ichatFiles = ichatFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-                var messagesYear: Int? = nil
-                if filterMessagesByYear {
-                    messagesYear = year
-                }
                 for ichatFile in ichatFiles {
-                    try gatherMessagesFrom(ichatFile: ichatFile, attachmentsURL: attachmentsURL,
-                                           year: messagesYear)
+                    try gatherMessagesFrom(ichatFile: ichatFile,
+                                           attachmentsURL: attachmentsURL)
                 }
             }
         } catch let FileError.xmlParsingError(message) {
@@ -517,6 +503,6 @@ class MessageSource_Archive {
             print("Error: \(error.localizedDescription)")
         }
 
-        return messages
+        return messagesByYear
     }
 }

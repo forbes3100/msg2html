@@ -222,6 +222,53 @@ struct Message {
     var attachments: [(String, URL?)]
 }
 
+func getMessagesByYear(source: String, msgsDirURL: URL, attachments: String,
+                       extAttDir: String? = nil) -> [Int: [Message]] {
+    let fileManager = FileManager.default
+    let attachmentsURL = msgsDirURL.appendingPathComponent(attachments)
+    
+    if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
+        var files = [String]()
+        let enumerator = fileManager.enumerator(atPath: extAttDir)
+        while let element = enumerator?.nextObject() as? String {
+            files.append(element)
+        }
+        extAttFiles = [String: URL]()
+        for file in files {
+            extAttFiles![file] = URL(fileURLWithPath: extAttDir)
+        }
+    }
+    
+    var messagesByYear: [Int: [Message]] = [:]
+    if source.hasSuffix("db") {
+        /*
+         let handlesName = "chat_handles.json"
+         let handlesURL = URL(string: source)?.deletingLastPathComponent().appending(path: handlesName)
+         var idNamedHandles: [String:String] = [:]
+         if let url = handlesURL,
+         fileManager.fileExists(atPath: handlesURL!.path) {
+         do {
+         let data = try Data(contentsOf: url)
+         idNamedHandles = try JSONSerialization.jsonObject(with: data,
+         options: []) as! [String: String]
+         } catch {
+         fatalError("Reading database handles file \(url.path)")
+         }
+         }
+         
+         let msgSrc = MessageSource_ChatDB(msgsBakDirPath: msgsBakDirPath,
+         idNamedHandles: idNamedHandles)
+         messages = msgSrc.getMessagesFor(year: year)
+         */
+    } else {
+        let msgSrc = MessageSource_Archive()
+        messagesByYear = msgSrc.getMessagesByYear(inArchive: source,
+                                                  attachmentsURL: attachmentsURL)
+    }
+    return messagesByYear
+}
+
+
 class HTML {
     private var html = ""
     var css: CSS?
@@ -408,60 +455,16 @@ class HTML {
         }
     }
 
-    func appendMessages(source: String, htmlDirURL: URL, attachments: String, year: Int,
-                        extAttDir: String? = nil) {
-        let fileManager = FileManager.default
-        let attachmentsURL = htmlDirURL.appendingPathComponent(attachments)
-
-        if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
-            var files = [String]()
-            let enumerator = fileManager.enumerator(atPath: extAttDir)
-            while let element = enumerator?.nextObject() as? String {
-                files.append(element)
-            }
-            extAttFiles = [String: URL]()
-            for file in files {
-                extAttFiles![file] = URL(fileURLWithPath: extAttDir)
-            }
-        }
-
-        var messages: [Message] = []
-        if source.hasSuffix("db") {
-            /*
-            let handlesName = "chat_handles.json"
-            let handlesURL = URL(string: source)?.deletingLastPathComponent().appending(path: handlesName)
-            var idNamedHandles: [String:String] = [:]
-            if let url = handlesURL,
-               fileManager.fileExists(atPath: handlesURL!.path) {
-                do {
-                    let data = try Data(contentsOf: url)
-                    idNamedHandles = try JSONSerialization.jsonObject(with: data,
-                                                                      options: []) as! [String: String]
-                } catch {
-                    fatalError("Reading database handles file \(url.path)")
-                }
-            }
-
-            let msgSrc = MessageSource_ChatDB(msgsBakDirPath: msgsBakDirPath,
-                                              idNamedHandles: idNamedHandles)
-            messages = msgSrc.getMessagesFor(year: year)
-             */
-        } else {
-            let msgSrc = MessageSource_Archive()
-            messages = msgSrc.getMessages(inArchive: source, attachmentsURL: attachmentsURL, forYear: year)
-        }
-        
+    init(messages: [Message]) {
         // Sort messages by date/time
-        messages = messages.sorted { $0.date < $1.date }
-
         var prevDay = 0
         var prevWho: String? = nil
         var prevMessage: Message? = nil
 
-        print("============== writing HTML ===============")
+        print("============== building HTML ===============")
         var isFirstMessageinHtmlFile = true
         for msg in messages {
-
+            
             if let p = prevMessage,
                p.date == msg.date && p.text == msg.text && p.who == msg.who {
                 continue
@@ -469,15 +472,12 @@ class HTML {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "M/d/yy, h:mm a"
             let dateStr = dateFormatter.string(from: msg.date)
-
+            
             print("\n message(file: \(msg.fileName)\n    who: \(msg.who ?? "?")")
             let calendar = Calendar.current
-//            if calendar.component(.year, from: msg.date) != year {
-//                continue
-//            }
-
-           let isNewThread = msg.isFirst || msg.party != prevMessage?.party
-           let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
+            
+            let isNewThread = msg.isFirst || msg.party != prevMessage?.party
+            let day = calendar.ordinality(of: .day, in: .year, for: msg.date) ?? -1
             if (day != prevDay || isNewThread) && !isFirstMessageinHtmlFile  {
                 if isNewThread {
                     html.append("<hr class=\"hr_thread\">\n")
@@ -485,7 +485,7 @@ class HTML {
                     html.append("<hr class=\"hr_day\">\n")
                 }
             }
-
+            
             css = CSS(isFromMe: msg.isFromMe, svc: msg.svc)
             let who = msg.who ?? "Unknown"
             if msg.isFromMe {
@@ -521,7 +521,7 @@ class HTML {
             prevDay = day
             prevMessage = msg
             isFirstMessageinHtmlFile = false
-
+            
             // Possible cases:
             //   text
             //   attachment
@@ -574,16 +574,17 @@ class HTML {
 
 }
 
-/// Convert one year of messages in database db to an HTML file.
+/// Convert messages in database db to an HTML file.
 ///
 /// - Parameters:
 ///   - from: Database file or archive directory path string.
-///   - htmlDir: Directory path string, containing attachments directory, where HTML file is to be written.
+///   - msgsDir: Directory path string, containing attachments directory, where HTML file(s) are to be written.
 ///   - attachments: Attachments directory name.
-///   - forYear: Desired year as an integer.
 ///   - externalAttachmentLibrary: Optional external attachments directory for additional attachments.
+///   - year: Starting year as an integer.
+///   - toYear: Optional ending year as an integer.
 ///   - toHtmlFile: Output file base name.
-func convertMessages(from source: String, htmlDir: String, attachments: String,
+func convertMessages(from source: String, msgsDir: String, attachments: String,
                      externalAttachmentLibrary: String? = nil,
                      year: Int, toYear: Int? = nil, toHtmlFile: String) {
     
@@ -591,17 +592,21 @@ func convertMessages(from source: String, htmlDir: String, attachments: String,
     // ** TODO **
     
     // convert all messages in database
-    //let year = Calendar.current.component(.year, from: Date())
-    let htmlDirURL = URL(fileURLWithPath: htmlDir)
-    let endYear = toYear ?? year
-    for y in year...endYear {
-        let html = HTML()
-        html.appendMessages(source: source, htmlDirURL: htmlDirURL, attachments: attachments, year: y)
-        html.write(file: htmlDirURL.appendingPathComponent(toHtmlFile + "\(y).html").path)
+    let msgsDirURL = URL(fileURLWithPath: msgsDir)
+    let messagesByYear = getMessagesByYear(source: source, msgsDirURL: msgsDirURL,
+                                           attachments: attachments)
+
+    for y in year...(toYear ?? year) {
+        if let messagesUnsorted = messagesByYear[y] {
+            let messages = messagesUnsorted.sorted { $0.date < $1.date }
+            let html = HTML(messages: messages)
+            let name = msgsDirURL.appendingPathComponent(toHtmlFile + "\(y).html").path
+            html.write(file: name)
+        }
     }
 }
 
-func msg2html(htmlDir: String) {
+func msg2html(msgsDir: String) {
 
     /*
     let msgsBakName = "messages_icloud_bak"
@@ -632,11 +637,11 @@ func msg2html(htmlDir: String) {
 //    let archiveAttachments = "TestAttachments"
 //    let archiveYear = 2024
 
-    let archivePath = htmlDir + "/Archive"
+    let archivePath = msgsDir + "/Archive"
     let archiveAttachments = "Attachments"
     let year = 2022
     let endYear = 2022
 
-    convertMessages(from: archivePath, htmlDir: htmlDir, attachments: archiveAttachments,
+    convertMessages(from: archivePath, msgsDir: msgsDir, attachments: archiveAttachments,
                     year: year, toYear: endYear, toHtmlFile: "testOut")
 }
