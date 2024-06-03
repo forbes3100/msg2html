@@ -225,25 +225,13 @@ struct Message {
 }
 
 func getMessagesByYear(source: String, msgsDirURL: URL, attachments: String,
-                       extAttDir: String? = nil) -> [Int: [Message]] {
-    let fileManager = FileManager.default
+                       extAttachments: String? = nil) -> [Int: [Message]] {
     let attachmentsURL = msgsDirURL.appendingPathComponent(attachments)
-    
-    if let extAttDir = extAttDir, fileManager.fileExists(atPath: extAttDir) {
-        var files = [String]()
-        let enumerator = fileManager.enumerator(atPath: extAttDir)
-        while let element = enumerator?.nextObject() as? String {
-            files.append(element)
-        }
-        extAttFiles = [String: URL]()
-        for file in files {
-            extAttFiles![file] = URL(fileURLWithPath: extAttDir)
-        }
-    }
-    
+
     var messagesByYear: [Int: [Message]] = [:]
     if source.hasSuffix("db") {
         /*
+         let fileManager = FileManager.default
          let handlesName = "chat_handles.json"
          let handlesURL = URL(string: source)?.deletingLastPathComponent().appending(path: handlesName)
          var idNamedHandles: [String:String] = [:]
@@ -265,7 +253,7 @@ func getMessagesByYear(source: String, msgsDirURL: URL, attachments: String,
     } else {
         let msgSrc = MessageSource_Archive()
         messagesByYear = msgSrc.getMessagesByYear(inArchive: source,
-                                                  attachmentsURL: attachmentsURL)
+            attachmentsURL: attachmentsURL, extAttachments: extAttachments)
     }
     return messagesByYear
 }
@@ -461,7 +449,6 @@ class HTML {
     }
 
     init(messages: [Message]) {
-        // Sort messages by date/time
         var prevDay = 0
         var prevWho: String? = nil
         var prevMessage: Message? = nil
@@ -591,21 +578,18 @@ class HTML {
 ///   - from: Database file or archive directory path string.
 ///   - msgsDir: Directory path string, containing attachments directory, where HTML file(s) are to be written.
 ///   - attachments: Attachments directory name.
-///   - externalAttachmentLibrary: Optional external attachments directory for additional attachments.
+///   - extAttachments: Optional external attachments directory for additional attachments.
 ///   - year: Starting year as an integer.
 ///   - toYear: Optional ending year as an integer.
 ///   - toHtmlFile: Output file base name.
 func convertMessages(from source: String, msgsDir: String, attachments: String,
-                     externalAttachmentLibrary: String? = nil,
+                     extAttachments: String? = nil,
                      year: Int, toYear: Int? = nil, toHtmlFile: String) {
-    
-    // if external attachments directory path given, make a list of files there
-    // ** TODO **
     
     // convert all messages in database
     let msgsDirURL = URL(fileURLWithPath: msgsDir)
     let messagesByYear = getMessagesByYear(source: source, msgsDirURL: msgsDirURL,
-                                           attachments: attachments)
+            attachments: attachments, extAttachments: extAttachments)
 
     for y in year...(toYear ?? year) {
         if let messagesUnsorted = messagesByYear[y] {
@@ -618,29 +602,6 @@ func convertMessages(from source: String, msgsDir: String, attachments: String,
 }
 
 func msg2html(msgsDir: String) {
-
-    /*
-    let msgsBakName = "messages_icloud_bak"
-    let docsPath = try? fileManager.url(
-        for: .documentDirectory,
-        in: .userDomainMask,
-        appropriateFor: nil,
-        create: false
-    ).path + "/"
-    let msgsBakDirPath = (docsPath ?? "") + msgsBakName + "/"
-
-    if !(fileManager.fileExists(atPath: msgsBakDirPath)) {
-        do {
-            try fileManager.createDirectory(
-                atPath: msgsBakDirPath,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-        } catch {
-            fatalError("Creating backup folder \(msgsBakDirPath)")
-        }
-    }
-*/
     let fileManager = FileManager.default
     let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
     if debug > 0 {
@@ -652,9 +613,11 @@ func msg2html(msgsDir: String) {
 
     let archivePath = msgsDir + "/Archive"
     let archiveAttachments = "Attachments"
+    let extAttachments = "/Volumes/TB8A/msgs/Attachments"
     let year = 2012
     let endYear = 2024
 
     convertMessages(from: archivePath, msgsDir: msgsDir, attachments: archiveAttachments,
+                    extAttachments: extAttachments,
                     year: year, toYear: endYear, toHtmlFile: "testOut")
 }

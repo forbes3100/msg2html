@@ -41,38 +41,53 @@ func formatDate(_ date: Date) -> String {
     return dateFormatter.string(from: date)
 }
 
-func findGUIDSubdirectory(in attachmentsDirectory: URL, guid: String) -> URL? {
+// Recursively search for the target directory or file
+func searchDirectory(at url: URL, for target: String) -> URL? {
     let fileManager = FileManager.default
     
-    // Function to recursively search for the GUID directory
-    func searchDirectory(at url: URL) -> URL? {
-        do {
-            let contents = try fileManager.contentsOfDirectory(at: url,
-                                includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
-            for item in contents {
-                var isDirectory: ObjCBool = false
-                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory)
-                        && isDirectory.boolValue {
-                    if item.lastPathComponent == guid {
-                        return item
-                    } else if let found = searchDirectory(at: item) {
-                        return found
-                    }
+    do {
+        let contents = try fileManager.contentsOfDirectory(at: url,
+                            includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory) {
+                if item.lastPathComponent == target {
+                    return item
+                } else if isDirectory.boolValue,
+                          let found = searchDirectory(at: item, for: target) {
+                    return found
                 }
             }
-        } catch {
-            print("Error reading directory: \(error)")
         }
-        return nil
+    } catch {
+        fatalError("searchDirectory: \(error)")
     }
-    
-    return searchDirectory(at: attachmentsDirectory)
+    return nil
+}
+
+func getUniqueFileURL(for fileName: String, in directoryURL: URL) -> URL {
+    let fileManager = FileManager.default
+    let fileURL = URL(string: fileName)!
+    let fileExtension = fileURL.pathExtension
+    let baseFileName = fileURL.deletingPathExtension().lastPathComponent
+    var uniqueFileURL = directoryURL.appendingPathComponent(fileURL.lastPathComponent)
+
+    var serialNo = 1
+    while fileManager.fileExists(atPath: uniqueFileURL.path) {
+        let uniqueFileName = "\(baseFileName)-\(serialNo)"
+        uniqueFileURL = directoryURL.appendingPathComponent(uniqueFileName).appendingPathExtension(fileExtension)
+        serialNo += 1
+    }
+
+    return uniqueFileURL
 }
 
 
 class MessageSource_Archive {
     private var fileManager: FileManager
     var attachmentsURL: URL!
+    var extAttachments: String? = nil
+    var extAttachmentCopiesURL: URL!
     var participantNamesByID: [String: String] = [:]
     var myID: String? = nil
     var messagesByYear: [Int: [Message]] = [:]
@@ -182,18 +197,38 @@ class MessageSource_Archive {
     // Parse message style/attachment and return attached file's name and URL, if any.
     func parse(styleAttachment: [String: Any], from objects: [Any],
                        parent: MessageSource_Archive) -> (String?, URL?) {
+        let fileManager = FileManager.default
         let attachmentDict = ArchiveNSDictionary(styleAttachment, from: objects, parent: self)
         //print("\(attachmentDict)")
         if let fileGUID = attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
            let fileName = attachmentDict["__kIMFilenameAttributeName"] as? String {
+
             // have attached file's path: return URL if file exists
-            if let guidDirectory = findGUIDSubdirectory(in: parent.attachmentsURL, guid: fileGUID) {
+            if let guidDirectory = searchDirectory(at: parent.attachmentsURL, for: fileGUID) {
                 let attachmentURL = guidDirectory.appendingPathComponent(fileName)
                 if debug > 3 {
                     let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
                     print("Attachment: \(d)/\(fileName)")
                 }
                 return (fileName, attachmentURL)
+
+           // else look for file in external attachments, copying it in if found
+           } else if let extAttPath = parent.extAttachments,
+                     let extAttURL = URL(string: extAttPath),
+                     let attachmentURL = searchDirectory(at: extAttURL, for: fileName) {
+               let extAttCopyURL = getUniqueFileURL(for: fileName,
+                                                    in: parent.extAttachmentCopiesURL)
+               do {
+                   try fileManager.copyItem(at: attachmentURL, to: extAttCopyURL)
+               } catch {
+                   fatalError("copying external attachment \(extAttCopyURL.path): \(error)")
+               }
+                if debug > 0 {
+                    print("External attachment: \(attachmentURL.path)")
+                    print(" copied to: \(extAttCopyURL.path)")
+                }
+                return (fileName, extAttCopyURL)
+
             } else {
                 // return attachment file name, but no URL
                 return (fileName, nil)
@@ -204,12 +239,18 @@ class MessageSource_Archive {
     }
 
     // Unarchive a .ichat file and add to messages array
-    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL) throws {
+    func gatherMessagesFrom(ichatFile fileURL: URL, attachmentsURL: URL,
+                            extAttachments: String?) throws {
         // Read the file data
         let fileData = try Data(contentsOf: fileURL)
         //print("\n\ngatherMessagesFrom(ichatFile=\(fileURL.lastPathComponent)")
         self.attachmentsURL = attachmentsURL
+        self.extAttachments = extAttachments
         //print("attachmentURL=\(attachmentsURL.lastPathComponent))")
+        self.extAttachmentCopiesURL = attachmentsURL.deletingLastPathComponent().appendingPathComponent("ExtAttachmentCopies")
+        if !fileManager.fileExists(atPath: extAttachmentCopiesURL.path) {
+            try fileManager.createDirectory(at: extAttachmentCopiesURL, withIntermediateDirectories: false)
+        }
 
         // Deserialize the plist
         var format = PropertyListSerialization.PropertyListFormat.xml
@@ -489,7 +530,8 @@ class MessageSource_Archive {
     }
 
     func getMessagesByYear(inArchive directoryPath: String,
-                           attachmentsURL: URL) -> [Int: [Message]] {
+                           attachmentsURL: URL,
+                           extAttachments: String?) -> [Int: [Message]] {
         let directoryURL = URL(fileURLWithPath: directoryPath)
 
         do {
@@ -511,7 +553,8 @@ class MessageSource_Archive {
 
                 for ichatFile in ichatFiles {
                     try gatherMessagesFrom(ichatFile: ichatFile,
-                                           attachmentsURL: attachmentsURL)
+                                           attachmentsURL: attachmentsURL,
+                                           extAttachments: extAttachments)
                 }
             }
         } catch let FileError.xmlParsingError(message) {
