@@ -263,6 +263,7 @@ class HTML {
     private var html = ""
     var css: CSS?
     var links: String? = nil
+    var basePathCount: Int
 
     func append(tag: String, attributes: [String: String] = [:], content: String? = nil) {
         let a = attributes.map { " \($0.key)=\"\($0.value)\"" }.joined()
@@ -377,8 +378,10 @@ class HTML {
         if debug > 1 {
             print("output(attachmentNo: \(attachmentNo) for \(String(describing: msg.text))")
         }
+
         if let url = url, fileManager.fileExists(atPath: url.path) {
-            var aPath = url.pathComponents.suffix(5).joined(separator: "/")
+            let n = url.pathComponents.count - self.basePathCount
+            var aPath = url.pathComponents.suffix(n).joined(separator: "/")
             let aWidth = 300
             let aSplitExt = (aPath as NSString).pathExtension
             let isPP = aSplitExt == "pluginPayloadAttachment"
@@ -448,7 +451,8 @@ class HTML {
         }
     }
 
-    init(messages: [Message]) {
+    init(messages: [Message], baseURL: URL) {
+        self.basePathCount = baseURL.pathComponents.count
         var prevDay = 0
         var prevWho: String? = nil
         var prevMessage: Message? = nil
@@ -594,7 +598,7 @@ func convertMessages(from source: String, msgsDir: String, attachments: String,
     for y in year...(toYear ?? year) {
         if let messagesUnsorted = messagesByYear[y] {
             let messages = messagesUnsorted.sorted { $0.date < $1.date }
-            let html = HTML(messages: messages)
+            let html = HTML(messages: messages, baseURL: msgsDirURL)
             let name = msgsDirURL.appendingPathComponent(toHtmlFile + "\(y).html").path
             html.write(file: name)
         }
@@ -619,5 +623,5 @@ func msg2html(msgsDir: String) {
 
     convertMessages(from: archivePath, msgsDir: msgsDir, attachments: archiveAttachments,
                     extAttachments: extAttachments,
-                    year: year, toYear: endYear, toHtmlFile: "testOut")
+                    year: year, toYear: endYear, toHtmlFile: "")
 }
