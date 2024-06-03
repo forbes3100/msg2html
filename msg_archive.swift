@@ -65,21 +65,84 @@ func searchDirectory(at url: URL, for target: String) -> URL? {
     return nil
 }
 
-func getUniqueFileURL(for fileName: String, in directoryURL: URL) -> URL {
-    let fileManager = FileManager.default
-    let fileURL = URL(string: fileName)!
-    let fileExtension = fileURL.pathExtension
-    let baseFileName = fileURL.deletingPathExtension().lastPathComponent
-    var uniqueFileURL = directoryURL.appendingPathComponent(fileURL.lastPathComponent)
+struct FileMetadata {
+    let length: UInt64
+    let modificationDate: Date
+}
 
-    var serialNo = 1
-    while fileManager.fileExists(atPath: uniqueFileURL.path) {
-        let uniqueFileName = "\(baseFileName)-\(serialNo)"
-        uniqueFileURL = directoryURL.appendingPathComponent(uniqueFileName).appendingPathExtension(fileExtension)
-        serialNo += 1
+class UniqueFileURLGenerator {
+    private var fileMetadataDict: [String: FileMetadata] = [:]
+    private var directoryURL: URL?
+
+    // Return a unique filename URL in this directory, and a flag that's true if
+    // the file already exists here.
+    func getUniqueFileURL(for fileName: String, in directoryURL: URL) -> (URL, Bool) {
+        let fileManager = FileManager.default
+
+        // Ensure the directoryURL is the same
+        if self.directoryURL == nil {
+            self.directoryURL = directoryURL
+            // if first time, gather all existing file's metadata
+            do {
+                let contents = try fileManager.contentsOfDirectory(
+                    at: directoryURL, includingPropertiesForKeys: nil,
+                    options: .skipsHiddenFiles)
+                for fileURL in contents {
+                    if let fileAttributes = try? fileManager.attributesOfItem(
+                        atPath: fileURL.path),
+                       let fileSize = fileAttributes[.size] as? UInt64,
+                       let fileModDate = fileAttributes[.modificationDate] as? Date {
+                        let metadata = FileMetadata(length: fileSize,
+                                                    modificationDate: fileModDate)
+                        fileMetadataDict[fileURL.lastPathComponent] = metadata
+                    }
+                }
+            } catch {
+                fatalError("gathering metadata in directory \(directoryURL.path): \(error)")
+            }
+        } else if self.directoryURL != directoryURL {
+            fatalError("The directoryURL has changed in UniqueFileURLGenerator.")
+        }
+
+        let fileURL = URL(fileURLWithPath: fileName)
+        let fileExtension = fileURL.pathExtension
+        let baseFileName = fileURL.deletingPathExtension().lastPathComponent
+        var uniqueFileURL = directoryURL.appendingPathComponent(fileURL.lastPathComponent)
+
+        if let existingMetadata = fileMetadataDict[fileURL.lastPathComponent] {
+            if let fileAttributes = try? fileManager.attributesOfItem(atPath: uniqueFileURL.path),
+               let fileSize = fileAttributes[.size] as? UInt64,
+               let fileModDate = fileAttributes[.modificationDate] as? Date,
+               fileSize == existingMetadata.length,
+               fileModDate == existingMetadata.modificationDate {
+                // File with the same name, length, and modification date already exists
+                return (uniqueFileURL, true)
+            }
+        }
+
+        var serialNo = 1
+        while fileManager.fileExists(atPath: uniqueFileURL.path) {
+            let uniqueFileName = "\(baseFileName)-\(serialNo)"
+            uniqueFileURL = directoryURL.appendingPathComponent(uniqueFileName)
+                .appendingPathExtension(fileExtension)
+            serialNo += 1
+        }
+
+        return (uniqueFileURL, false)
+    }
+    
+    func saveMetadata(for fileName: String, in directoryURL: URL) {
+        let fileManager = FileManager.default
+        let fileURL = directoryURL.appendingPathComponent(fileName)
+
+        if let fileAttributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
+           let fileSize = fileAttributes[.size] as? UInt64,
+           let fileModDate = fileAttributes[.modificationDate] as? Date {
+            let metadata = FileMetadata(length: fileSize, modificationDate: fileModDate)
+            fileMetadataDict[fileURL.lastPathComponent] = metadata
+        }
     }
 
-    return uniqueFileURL
 }
 
 
@@ -91,6 +154,7 @@ class MessageSource_Archive {
     var participantNamesByID: [String: String] = [:]
     var myID: String? = nil
     var messagesByYear: [Int: [Message]] = [:]
+    var generator = UniqueFileURLGenerator()
 
     init() {
         self.fileManager = FileManager.default
@@ -216,18 +280,26 @@ class MessageSource_Archive {
            } else if let extAttPath = parent.extAttachments,
                      let extAttURL = URL(string: extAttPath),
                      let attachmentURL = searchDirectory(at: extAttURL, for: fileName) {
-               let extAttCopyURL = getUniqueFileURL(for: fileName,
-                                                    in: parent.extAttachmentCopiesURL)
-               do {
-                   try fileManager.copyItem(at: attachmentURL, to: extAttCopyURL)
-               } catch {
-                   fatalError("copying external attachment \(extAttCopyURL.path): \(error)")
+               let (extAttCopyURL, fileExists) = self.generator.getUniqueFileURL(
+                    for: fileName, in: parent.extAttachmentCopiesURL)
+               if fileExists {
+                   if debug > 0 {
+                       print("Have external attachment copy: \(extAttCopyURL.path)")
+                   }
+               } else {
+                  do {
+                       try fileManager.copyItem(at: attachmentURL, to: extAttCopyURL)
+                   } catch {
+                       fatalError("copying external attachment \(extAttCopyURL.path): \(error)")
+                   }
+                   self.generator.saveMetadata(for: fileName,
+                                               in: parent.extAttachmentCopiesURL)
+                   if debug > 0 {
+                        print("External attachment: \(attachmentURL.path)")
+                        print(" copied to: \(extAttCopyURL.path)")
+                   }
                }
-                if debug > 0 {
-                    print("External attachment: \(attachmentURL.path)")
-                    print(" copied to: \(extAttCopyURL.path)")
-                }
-                return (fileName, extAttCopyURL)
+               return (fileName, extAttCopyURL)
 
             } else {
                 // return attachment file name, but no URL
