@@ -34,12 +34,12 @@ final class Msg2HtmlTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: htmlFile))
         XCTAssertFalse(FileManager.default.fileExists(atPath: heicJpeg))
 
-        let htmlDir = ""
+        let msgsDir = ""
         let archiveDir = "TestArchive"
         let attDir = "TestAttachments"
         let extAttDir: String? = nil
 
-        convertMessages(from: archiveDir, htmlDir: htmlDir, attachments: attDir, externalAttachmentLibrary: extAttDir, year: year, toHtmlFile: htmlName)
+        convertMessages(from: archiveDir, msgsDir: msgsDir, attachments: attDir, extAttachments: extAttDir, year: year, toHtmlFile: htmlName)
         let htmlFileURL = URL(fileURLWithPath: htmlFile)
         XCTAssertTrue(FileManager.default.fileExists(atPath: htmlFileURL.path))
 

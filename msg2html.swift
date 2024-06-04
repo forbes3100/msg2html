@@ -604,24 +604,3 @@ func convertMessages(from source: String, msgsDir: String, attachments: String,
         }
     }
 }
-
-func msg2html(msgsDir: String) {
-    let fileManager = FileManager.default
-    let currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-    if debug > 0 {
-        print("Current Directory: \(currentDirectoryURL.path)")
-    }
-//    let archivePath = currentDirectoryURL.appendingPathComponent("TestArchive").path
-//    let archiveAttachments = "TestAttachments"
-//    let archiveYear = 2024
-
-    let archivePath = msgsDir + "/Archive"
-    let archiveAttachments = "Attachments"
-    let extAttachments = "/Volumes/TB8A/msgs/Attachments"
-    let year = 2012
-    let endYear = 2024
-
-    convertMessages(from: archivePath, msgsDir: msgsDir, attachments: archiveAttachments,
-                    extAttachments: extAttachments,
-                    year: year, toYear: endYear, toHtmlFile: "")
-}
