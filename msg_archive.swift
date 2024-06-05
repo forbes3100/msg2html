@@ -266,41 +266,57 @@ class MessageSource_Archive {
         //print("\(attachmentDict)")
         if let fileGUID = attachmentDict["__kIMFileTransferGUIDAttributeName"] as? String,
            let fileName = attachmentDict["__kIMFilenameAttributeName"] as? String {
-
+            
             // have attached file's path: return URL if file exists
             if let guidDirectory = searchDirectory(at: parent.attachmentsURL, for: fileGUID) {
                 let attachmentURL = guidDirectory.appendingPathComponent(fileName)
-                if debug > 3 {
-                    let d = guidDirectory.pathComponents.suffix(4).joined(separator: "/")
-                    print("Attachment: \(d)/\(fileName)")
+                if fileManager.fileExists(atPath: attachmentURL.path) {
+                    if debug > 3 {
+                        let path = attachmentURL.pathComponents.suffix(5).joined(separator: "/")
+                        print("Attachment: \(path)")
+                    }
+                    return (fileName, attachmentURL)
+                    // else look for fileName anywhere in Attachments
+                } else if let attachmentURL = searchDirectory(at: parent.attachmentsURL,
+                                                              for: fileName) {
+                    if debug > 3 {
+                        print("Attachment: \(attachmentURL.path)")
+                    }
+                    return (fileName, attachmentURL)
                 }
-                return (fileName, attachmentURL)
-
-           // else look for file in external attachments, copying it in if found
-           } else if let extAttPath = parent.extAttachments,
-                     let extAttURL = URL(string: extAttPath),
-                     let attachmentURL = searchDirectory(at: extAttURL, for: fileName) {
-               let (extAttCopyURL, fileExists) = self.generator.getUniqueFileURL(
+                return (fileName, nil)
+                
+                // else look for file in external attachments, copying it in if found
+            } else if let extAttPath = parent.extAttachments,
+                      let extAttURL = URL(string: extAttPath),
+                      let attachmentURL = searchDirectory(at: extAttURL, for: fileName) {
+                let (extAttCopyURL, fileExists) = self.generator.getUniqueFileURL(
                     for: fileName, in: parent.extAttachmentCopiesURL)
-               if fileExists {
-                   if debug > 0 {
-                       print("Have external attachment copy: \(extAttCopyURL.path)")
-                   }
-               } else {
-                  do {
-                       try fileManager.copyItem(at: attachmentURL, to: extAttCopyURL)
-                   } catch {
-                       fatalError("copying external attachment \(extAttCopyURL.path): \(error)")
-                   }
-                   self.generator.saveMetadata(for: fileName,
-                                               in: parent.extAttachmentCopiesURL)
-                   if debug > 0 {
+                if fileExists {
+                    if debug > 0 {
+                        print("Have external attachment copy: \(extAttCopyURL.path)")
+                    }
+                } else {
+                    do {
+                        try fileManager.copyItem(at: attachmentURL, to: extAttCopyURL)
+                    } catch {
+                        fatalError("copying external attachment \(extAttCopyURL.path): \(error)")
+                    }
+                    self.generator.saveMetadata(for: fileName,
+                                                in: parent.extAttachmentCopiesURL)
+                    if debug > 0 {
                         print("External attachment: \(attachmentURL.path)")
                         print(" copied to: \(extAttCopyURL.path)")
-                   }
-               }
-               return (fileName, extAttCopyURL)
-
+                    }
+                }
+                return (fileName, extAttCopyURL)
+                
+                // else look for fileName anywhere in Attachments
+            } else if let attachmentURL = searchDirectory(at: parent.attachmentsURL, for: fileName) {
+                if debug > 3 {
+                    print("Attachment: \(attachmentURL.path)")
+                }
+                return (fileName, attachmentURL)
             } else {
                 // return attachment file name, but no URL
                 return (fileName, nil)
