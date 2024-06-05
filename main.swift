@@ -10,11 +10,11 @@ import Foundation
 struct Config: Codable {
     var startYear: Int?
     var endYear: Int?
-    var debugLevel: Int
+    var debugLevel: Int?
     var msgsDir: String?
     var externalAttachmentLibrary: String?
     
-    init(startYear: Int? = nil, endYear: Int? = nil, debugLevel: Int = 0,
+    init(startYear: Int? = nil, endYear: Int? = nil, debugLevel: Int? = nil,
          msgsDir: String? = nil, externalAttachmentLibrary: String? = nil) {
         self.startYear = startYear
         self.endYear = endYear
@@ -153,6 +153,9 @@ func msg2html() {
         }
         showUsage()
         exit(1)
+    }
+    if let dl = config.debugLevel {
+        debug = dl
     }
 
     let archiveDir = config.msgsDir! + "/Archive"
