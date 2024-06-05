@@ -17,7 +17,7 @@ import AppKit
 //import UniformTypeIdentifiers
 
 // debug level: 0=none, 1=file, 2=message, 3=character, 4=attachment
-let debug = 0
+var debug = 0
 
 var haveLinks: Bool = false
 var attDirUrl: URL?
